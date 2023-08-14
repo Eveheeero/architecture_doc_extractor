@@ -1,4 +1,5 @@
 use crate::print_pages;
+use std::collections::HashMap;
 
 pub fn main() {
     let data = extract_text();
@@ -84,9 +85,23 @@ fn parse_instructions(data: Vec<String>) -> Vec<Instruction> {
             }
         }
         // Exceptions
+        line = data.next().unwrap();
         loop {
-            line = data.next().unwrap();
+            let title = line;
+            let mut exceptions = Vec::new();
+            loop {
+                line = data.next().unwrap();
+                if line.ends_with("Exceptions") || line.starts_with("OpcodeInstructionOp") {
+                    break;
+                }
+                exceptions.push(line);
+            }
+            obj.exceptions.insert(title, exceptions);
+            if line.starts_with("OpcodeInstructionOp") {
+                break;
+            }
         }
+        todo!();
     }
 
     result
@@ -100,5 +115,5 @@ struct Instruction {
     description: Vec<String>,
     operation: String,
     flag_affected: String,
-    exceptions: String,
+    exceptions: HashMap<String, Vec<String>>,
 }
