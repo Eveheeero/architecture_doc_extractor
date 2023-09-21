@@ -1,7 +1,7 @@
 use regex::Regex;
 
 use crate::print_pages;
-use std::{cell::OnceCell, collections::HashMap, sync::OnceLock};
+use std::{collections::HashMap, sync::OnceLock};
 
 pub fn main() {
     let data = extract_text();
@@ -19,92 +19,12 @@ fn extract_text() -> Vec<String> {
 }
 
 fn parse_instructions(data: Vec<String>) -> Vec<Instruction> {
+    data.into_iter().for_each(|x| {
+        let w = parse_category(x.clone());
+        dbg!(x, w);
+    });
+    todo!();
     let mut result = Vec::new();
-    let mut obj = Instruction::default();
-    let mut data = data.into_iter().peekable();
-    let mut line;
-    if let Some(line_) = data.next() {
-        line = line_;
-    } else {
-        return result;
-    }
-    let mut tmp = String::new();
-
-    loop {
-        // title parsing
-        obj.title = line[0..line.find('-').unwrap()].to_owned().to_lowercase();
-        obj.summary = line[line.find('-').unwrap() + 1..].to_owned();
-        // skip Instruction Operand Encoding, Description
-        data.next();
-        data.next();
-        // collapse description
-        loop {
-            line = data.next().unwrap();
-            if line == "Operation" {
-                if tmp.len() > 0 {
-                    obj.description.push(tmp);
-                    tmp = String::new();
-                }
-                break;
-            }
-            tmp.push_str(&line);
-            if (line.ends_with('.') || line.ends_with(". "))
-                && data
-                    .peek()
-                    .unwrap()
-                    .chars()
-                    .next()
-                    .unwrap()
-                    .is_ascii_uppercase()
-            {
-                obj.description.push(tmp);
-                tmp = String::new();
-            }
-        }
-        // parse Operation
-        loop {
-            line = data.next().unwrap();
-            if line == "Flags Affected" {
-                if tmp.ends_with('\n') {
-                    tmp.pop();
-                }
-                obj.operation = tmp;
-                tmp = String::new();
-                break;
-            }
-            tmp.push_str(&line);
-            if line.len() != 1 {
-                tmp.push('\n');
-            }
-        }
-        // Flags Affected
-        loop {
-            tmp.push_str(&data.next().unwrap());
-            if data.peek().unwrap().ends_with("Exceptions") {
-                obj.flag_affected = tmp;
-                tmp = String::new();
-                break;
-            }
-        }
-        // Exceptions
-        line = data.next().unwrap();
-        loop {
-            let title = line;
-            let mut exceptions = Vec::new();
-            loop {
-                line = data.next().unwrap();
-                if line.ends_with("Exceptions") || line.starts_with("OpcodeInstructionOp") {
-                    break;
-                }
-                exceptions.push(line);
-            }
-            obj.exceptions.insert(title, exceptions);
-            if line.starts_with("OpcodeInstructionOp") {
-                break;
-            }
-        }
-        todo!();
-    }
 
     result
 }
@@ -120,43 +40,61 @@ struct Instruction {
     exceptions: HashMap<String, Vec<String>>,
 }
 
+#[derive(Debug)]
 enum Category {
+    /// 줄거리가 포함된 라인, -을 기준으로 왼쪽이 인스트럭션, 오른쪽이 설명
     Summary,
+    /// 옵코드 별 설명, Opcode로 시작하고 Description에서 끝난다. 중간 내용은 계속 바뀌며, 줄바꿈이 올 수 있다.
+    /// TODO 수정 필요
     OpcodeDescription,
+    /// 인스트럭션 인코딩 방법, 다음 라인에 내용이 들어오는데 표시할 필요는 없는 듯 하다
     InstructionOperandEncoding,
+    /// 옵코드 설명, Description이 온 이후, 다음 Category가 올때까지가 설명임, 이전라인의 끝을 rtrim했을때 .으로 끝나고, 다음라인의 시작이 대문자이면 라인바꿈
     Description,
+    /// 옵코드 가상코드, 해당 라인 이후부터 시작
     Operation,
+    /// 해당 라인 이후부터 다음 Category가 올때까지 설명이 이어진다.
     FlagsAffected,
+    /// Exceptions. 종류가 무엇인지는 봐야한다. 다음 라인부터 설명이 적혀있다. Same exceptions as .. mode. 가 올수도 있다.
+    /// \# 가 온 이후에 대문자로 요약이 온 후, 설명이 온다. \#가 없을 수 있다. 없는경우 이전 \# 사용
     Exceptions,
+    /// belong to before category
     None,
-    NotInstruction,
+    /// 필요 없는 내용 (페이지 끝 주석이거나, 파싱할 필요 없는 내용)
+    NeedIgnore,
 }
 
 fn parse_category(data: impl AsRef<str>) -> Category {
     static SUMMARY: OnceLock<Regex> = OnceLock::new();
     static OPCODE_DESCRIPTION: OnceLock<Regex> = OnceLock::new();
     static INSTRUCTION_OPERAND_ENCODING: OnceLock<Regex> = OnceLock::new();
+    static DESCRIPTION: OnceLock<Regex> = OnceLock::new();
     static OPERATION: OnceLock<Regex> = OnceLock::new();
     static FLAGAFFECTED: OnceLock<Regex> = OnceLock::new();
     static EXCEPTIONS: OnceLock<Regex> = OnceLock::new();
-    let summary = SUMMARY.get_or_init(|| Regex::new("^[^a-z]*-.+$").unwrap());
+    static IGNORE: OnceLock<Regex> = OnceLock::new();
+    let summary = SUMMARY.get_or_init(|| Regex::new("^[^a-z ]*-.+$").unwrap());
     // Opcode로 시작해서 여러 줄 거쳐서 Description으로 끝나는 경우
     let opcode_description =
         OPCODE_DESCRIPTION.get_or_init(|| Regex::new("^Opcode.*Description$").unwrap());
     let instruction_operand_encoding = INSTRUCTION_OPERAND_ENCODING
         .get_or_init(|| Regex::new("^Op/En.*Operand 1Operand 2Operand 3Operand 4$").unwrap());
+    let description = DESCRIPTION.get_or_init(|| Regex::new("^Description$").unwrap());
     let operation = OPERATION.get_or_init(|| Regex::new("^Operation$").unwrap());
     let flag_effected = FLAGAFFECTED.get_or_init(|| Regex::new("^Flags Affected$").unwrap());
     let exceptions = EXCEPTIONS.get_or_init(|| Regex::new("^.* Mode Exceptions$").unwrap());
+    let ignore = IGNORE.get_or_init(|| Regex::new("(^Instruction Operand Encoding$)").unwrap());
 
     let data = data.as_ref();
     match () {
         () if summary.is_match(data) => Category::Summary,
         () if opcode_description.is_match(data) => Category::OpcodeDescription,
         () if instruction_operand_encoding.is_match(data) => Category::InstructionOperandEncoding,
+        () if description.is_match(data) => Category::Description,
         () if operation.is_match(data) => Category::Operation,
         () if flag_effected.is_match(data) => Category::FlagsAffected,
         () if exceptions.is_match(data) => Category::Exceptions,
+        () if ignore.is_match(data) => Category::NeedIgnore,
         _ => Category::None,
     }
 }
