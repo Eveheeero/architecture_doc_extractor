@@ -14,7 +14,7 @@ fn extract_text() -> Vec<String> {
     for index in 129..=2266 {
         texts.append(&mut print_pages(&doc, index));
     }
-    // std::fs::write("intel.txt", texts.join("\n")).unwrap();
+    std::fs::write("intel.txt", texts.join("\n")).unwrap();
     texts
 }
 
@@ -37,6 +37,7 @@ fn parse_instructions(data: Vec<String>) -> Vec<Instruction> {
             }
             Category::OpcodeDescriptionStart => {
                 // DescriptionStart가 왔으면 end가 올때까지 무시
+                // instruction.instruction...
             }
             Category::InstructionOperandEncoding => {
                 // 파싱 계획 없음
@@ -47,7 +48,7 @@ fn parse_instructions(data: Vec<String>) -> Vec<Instruction> {
                 stacked_content.clear();
             }
             Category::Operation => {
-                instruction.instruction = (title.clone(), stacked_content.join(""));
+                instruction.operation = stacked_content.join("");
                 stacked_content.clear();
             }
             Category::FlagsAffected => {
@@ -74,12 +75,18 @@ fn parse_instructions(data: Vec<String>) -> Vec<Instruction> {
         line = iter.next().unwrap();
         let category = parse_category(&line);
 
-        if last_category == Category::OpcodeDescriptionStart
-            && category != Category::OpcodeDescriptionEnd
-        {
-            // OpcodeDescriptionStart가 왔으면 end가 올때까지 무시
-            stacked_content.push(line);
-            continue;
+        if last_category == Category::OpcodeDescriptionStart {
+            if !line.ends_with("Description") {
+                // OpcodeDescriptionStart가 왔으면 end가 올때까지 무시
+                stacked_content.push(line);
+                continue;
+            } else {
+                // OpcodeDescription 파싱
+                // TODO stacked_content로 OpcodeDescription 테이블 가져옴
+                stacked_content.clear();
+                last_category = Category::OpcodeDescription;
+                continue;
+            }
         }
 
         match category {
@@ -87,6 +94,7 @@ fn parse_instructions(data: Vec<String>) -> Vec<Instruction> {
                 close();
                 // 이전 데이터 등록 (last_category가 NeedIgnore일경우 처음이니까 무시)
                 if last_category != Category::NeedIgnore {
+                    dbg!(&instruction);
                     result.push(instruction.clone());
                 }
                 instruction = Instruction::default();
@@ -107,17 +115,6 @@ fn parse_instructions(data: Vec<String>) -> Vec<Instruction> {
                 title = stacked_content.join("");
                 stacked_content.clear();
             }
-            Category::OpcodeDescriptionEnd => {
-                if last_category == Category::OpcodeDescriptionStart {
-                    // OpcodeDescription 파싱
-                    // TODO stacked_content로 OpcodeDescription 테이블 가져옴
-                    stacked_content.clear();
-                    last_category = Category::OpcodeDescription;
-                } else {
-                    // 이전 카테고리 상태가 start가 아니었으면 잘못 탐지된것임
-                    stacked_content.push(line);
-                }
-            }
             Category::InstructionOperandEncoding => {
                 close();
                 last_category = category;
@@ -128,7 +125,6 @@ fn parse_instructions(data: Vec<String>) -> Vec<Instruction> {
             }
             Category::Operation => {
                 close();
-                instruction.operation = line;
                 last_category = category;
             }
             Category::FlagsAffected => {
@@ -167,7 +163,6 @@ enum Category {
     /// TODO 수정 필요
     OpcodeDescription,
     OpcodeDescriptionStart,
-    OpcodeDescriptionEnd,
     /// 인스트럭션 인코딩 방법, 다음 라인에 내용이 들어오는데 표시할 필요는 없는 듯 하다
     InstructionOperandEncoding,
     /// 옵코드 설명, Description이 온 이후, 다음 Category가 올때까지가 설명임, 이전라인의 끝을 rtrim했을때 .으로 끝나고, 다음라인의 시작이 대문자이면 라인바꿈
@@ -195,7 +190,7 @@ fn parse_category(data: impl AsRef<str>) -> Category {
     static FLAGAFFECTED: OnceLock<Regex> = OnceLock::new();
     static EXCEPTIONS: OnceLock<Regex> = OnceLock::new();
     static IGNORE: OnceLock<Regex> = OnceLock::new();
-    let summary = SUMMARY.get_or_init(|| Regex::new("^[^a-z ]*-.+$").unwrap());
+    let summary = SUMMARY.get_or_init(|| Regex::new("^[^a-z0-9 ][^a-z ]*-.+$").unwrap());
     // Opcode로 시작해서 여러 줄 거쳐서 Description으로 끝나는 경우
     let opcode_description_start =
         OPCODE_DESCRIPTION_START.get_or_init(|| Regex::new("^Opcode").unwrap());
@@ -212,13 +207,12 @@ fn parse_category(data: impl AsRef<str>) -> Category {
     let data = data.as_ref();
     match () {
         () if summary.is_match(data) => Category::Summary,
+        () if description.is_match(data) => Category::Description,
         () if opcode_description_start.is_match(data) && opcode_description_end.is_match(data) => {
             Category::OpcodeDescription
         }
         () if opcode_description_start.is_match(data) => Category::OpcodeDescriptionStart,
-        () if opcode_description_end.is_match(data) => Category::OpcodeDescriptionEnd,
         () if instruction_operand_encoding.is_match(data) => Category::InstructionOperandEncoding,
-        () if description.is_match(data) => Category::Description,
         () if operation.is_match(data) => Category::Operation,
         () if flag_effected.is_match(data) => Category::FlagsAffected,
         () if exceptions.is_match(data) => Category::Exceptions,
