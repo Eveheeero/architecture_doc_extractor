@@ -62,6 +62,10 @@ fn parse_instructions(data: Vec<String>) -> Vec<Instruction> {
                     .insert(title.clone(), stacked_content.clone());
                 stacked_content.clear();
             }
+            Category::IntrinsicEquivalent => {
+                instruction.c_and_cpp_equivalent = stacked_content.clone();
+                stacked_content.clear();
+            }
 
             Category::NeedIgnore => {}
             _ => unreachable!(),
@@ -87,6 +91,12 @@ fn parse_instructions(data: Vec<String>) -> Vec<Instruction> {
                 last_category = Category::OpcodeDescription;
                 continue;
             }
+        }
+        if last_category == Category::IntrinsicEquivalentStart {
+            if line == " Compiler Intrinsic Equivalent" {
+                last_category = Category::IntrinsicEquivalent;
+            }
+            continue;
         }
 
         match category {
@@ -138,6 +148,14 @@ fn parse_instructions(data: Vec<String>) -> Vec<Instruction> {
             }
             Category::None => stacked_content.push(line),
             Category::NeedIgnore => {}
+            Category::IntrinsicEquivalent => {
+                close();
+                last_category = category;
+            }
+            Category::IntrinsicEquivalentStart => {
+                close();
+                last_category = category;
+            }
         };
     }
 
@@ -153,6 +171,7 @@ struct Instruction {
     operation: String,
     flag_affected: String,
     exceptions: HashMap<String, Vec<String>>,
+    c_and_cpp_equivalent: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -178,6 +197,9 @@ enum Category {
     None,
     /// 필요 없는 내용 (페이지 끝 주석이거나, 파싱할 필요 없는 내용)
     NeedIgnore,
+    /// c/c++코드와의 동일성
+    IntrinsicEquivalent,
+    IntrinsicEquivalentStart,
 }
 
 fn parse_category(data: impl AsRef<str>) -> Category {
@@ -190,6 +212,8 @@ fn parse_category(data: impl AsRef<str>) -> Category {
     static FLAGAFFECTED: OnceLock<Regex> = OnceLock::new();
     static EXCEPTIONS: OnceLock<Regex> = OnceLock::new();
     static IGNORE: OnceLock<Regex> = OnceLock::new();
+    static INTRINSIC_EQUIVALENT: OnceLock<Regex> = OnceLock::new();
+    static INTRINSIC_EQUIVALENT_START: OnceLock<Regex> = OnceLock::new();
     let summary = SUMMARY.get_or_init(|| Regex::new("^[^a-z0-9 ][^a-z ]*-.+$").unwrap());
     // Opcode로 시작해서 여러 줄 거쳐서 Description으로 끝나는 경우
     let opcode_description_start =
@@ -203,6 +227,10 @@ fn parse_category(data: impl AsRef<str>) -> Category {
     let flag_effected = FLAGAFFECTED.get_or_init(|| Regex::new("^Flags Affected$").unwrap());
     let exceptions = EXCEPTIONS.get_or_init(|| Regex::new("^.* Mode Exceptions$").unwrap());
     let ignore = IGNORE.get_or_init(|| Regex::new("(^Instruction Operand Encoding$)").unwrap());
+    let intrinsic_equivalent = INTRINSIC_EQUIVALENT
+        .get_or_init(|| Regex::new("^Intel C/C++ Compiler Intrinsic Equivalent$").unwrap());
+    let intrinsic_equivalent_start =
+        INTRINSIC_EQUIVALENT_START.get_or_init(|| Regex::new("^Intel C/C$").unwrap());
 
     let data = data.as_ref();
     match () {
@@ -217,6 +245,8 @@ fn parse_category(data: impl AsRef<str>) -> Category {
         () if flag_effected.is_match(data) => Category::FlagsAffected,
         () if exceptions.is_match(data) => Category::Exceptions,
         () if ignore.is_match(data) => Category::NeedIgnore,
+        () if intrinsic_equivalent.is_match(data) => Category::IntrinsicEquivalent,
+        () if intrinsic_equivalent_start.is_match(data) => Category::IntrinsicEquivalentStart,
         _ => Category::None,
     }
 }
