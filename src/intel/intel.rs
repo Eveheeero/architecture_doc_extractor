@@ -23,20 +23,44 @@ fn parse_instructions(data: Vec<String>) -> Vec<Instruction> {
     let mut iter = data.into_iter().peekable();
     let mut line: String;
     let mut last_category: Category = Category::NeedIgnore;
+    let mut title = String::new();
     let mut stacked_content = Vec::new();
     let mut instruction = Instruction::default();
 
     loop {
-        let close = || match last_category {
-            Category::OpcodeDescription => todo!(),
+        let mut close = || match last_category {
+            Category::OpcodeDescription => {
+                let content = stacked_content.join("");
+                stacked_content.clear();
+                // instruction에 저장
+                // TODO
+            }
             Category::OpcodeDescriptionStart => {
                 // DescriptionStart가 왔으면 end가 올때까지 무시
             }
-            Category::InstructionOperandEncoding => todo!(),
-            Category::Description => todo!(),
-            Category::Operation => todo!(),
-            Category::FlagsAffected => todo!(),
-            Category::Exceptions => todo!(),
+            Category::InstructionOperandEncoding => {
+                // 파싱 계획 없음
+                stacked_content.clear();
+            }
+            Category::Description => {
+                instruction.description = stacked_content.clone();
+                stacked_content.clear();
+            }
+            Category::Operation => {
+                instruction.instruction = (title.clone(), stacked_content.join(""));
+                stacked_content.clear();
+            }
+            Category::FlagsAffected => {
+                instruction.flag_affected = stacked_content.join("");
+                stacked_content.clear();
+            }
+            Category::Exceptions => {
+                // stacked_content를 다른것으로 파싱
+                instruction
+                    .exceptions
+                    .insert(title.clone(), stacked_content.clone());
+                stacked_content.clear();
+            }
 
             Category::NeedIgnore => {}
             _ => unreachable!(),
@@ -71,10 +95,17 @@ fn parse_instructions(data: Vec<String>) -> Vec<Instruction> {
                 instruction.title = line.next().unwrap().trim().to_string();
                 instruction.summary = line.next().unwrap().trim().to_string();
             }
-            Category::OpcodeDescription => todo!(),
+            Category::OpcodeDescription => {
+                close();
+                last_category = category;
+                title = line;
+            }
             Category::OpcodeDescriptionStart => {
                 close();
                 last_category = category;
+                stacked_content.push(line);
+                title = stacked_content.join("");
+                stacked_content.clear();
             }
             Category::OpcodeDescriptionEnd => {
                 if last_category == Category::OpcodeDescriptionStart {
@@ -87,11 +118,28 @@ fn parse_instructions(data: Vec<String>) -> Vec<Instruction> {
                     stacked_content.push(line);
                 }
             }
-            Category::InstructionOperandEncoding => todo!(),
-            Category::Description => todo!(),
-            Category::Operation => todo!(),
-            Category::FlagsAffected => todo!(),
-            Category::Exceptions => todo!(),
+            Category::InstructionOperandEncoding => {
+                close();
+                last_category = category;
+            }
+            Category::Description => {
+                close();
+                last_category = category;
+            }
+            Category::Operation => {
+                close();
+                instruction.operation = line;
+                last_category = category;
+            }
+            Category::FlagsAffected => {
+                close();
+                last_category = category;
+            }
+            Category::Exceptions => {
+                close();
+                title = line;
+                last_category = category;
+            }
             Category::None => stacked_content.push(line),
             Category::NeedIgnore => {}
         };
