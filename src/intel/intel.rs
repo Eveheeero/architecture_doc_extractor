@@ -12,54 +12,65 @@ pub fn main() {
     let _ = parse_instructions(data);
 }
 
-fn extract_text() -> Vec<String> {
+fn extract_text() -> Vec<Vec<String>> {
     let doc = lopdf::Document::load_mem(include_bytes!("intel.pdf")).unwrap();
     let mut texts = Vec::new();
     for index in 129..=2266 {
-        texts.append(&mut print_pages(&doc, index));
+        texts.push(print_pages(&doc, index));
     }
-    std::fs::write("intel.txt", texts.join("\n")).unwrap();
+    std::fs::write(
+        "intel.txt",
+        texts
+            .iter()
+            .flat_map(|x| x.to_owned())
+            .collect::<Vec<_>>()
+            .join("\n"),
+    )
+    .unwrap();
     texts
 }
 
-fn parse_instructions(data: Vec<String>) -> Vec<Instruction> {
-    let mut iter = data.into_iter().peekable();
+fn parse_instructions(data: Vec<Vec<String>>) -> Vec<Instruction> {
     let mut context = ParsingContext::default();
 
-    loop {
-        if iter.peek().is_none() {
-            // 기존내용 마무리
-            clear_stacked_status(&mut context);
-            break;
-        }
-        // 라인 읽기
-        context.read(&mut iter);
-        // 읽은 라인이 어떤내용인지 파싱
-        let category = parse_category(context.line());
+    for page in data.into_iter() {
+        let mut iter = page.into_iter().peekable();
+        loop {
+            if iter.peek().is_none() {
+                // 기존내용 마무리
+                clear_stacked_status(&mut context);
+                break;
+            }
+            // 라인 읽기
+            context.read(&mut iter);
+            // 읽은 라인이 어떤내용인지 파싱
+            let category = parse_category(context.line());
 
-        if context.last_category == Category::OpcodeDescriptionStart {
-            if !context.line().ends_with("Description") {
-                // OpcodeDescriptionStart가 왔으면 end가 올때까지 무시
-                context.stack(None);
-                continue;
-            } else {
-                // OpcodeDescription 파싱
-                // TODO stacked_content로 OpcodeDescription 테이블 가져옴
-                context.clear_stacked_data();
-                context.last_category = Category::OpcodeDescription;
+            if context.last_category == Category::OpcodeDescriptionStart {
+                if !context.line().ends_with("Description") {
+                    // OpcodeDescriptionStart가 왔으면 end가 올때까지 무시
+                    context.stack(None);
+                    continue;
+                } else {
+                    // OpcodeDescription 파싱
+                    // TODO stacked_content로 OpcodeDescription 테이블 가져옴
+                    context.clear_stacked_data();
+                    context.last_category = Category::OpcodeDescription;
+                    continue;
+                }
+            }
+            if context.last_category == Category::IntrinsicEquivalentStart {
+                if context.line() == " Compiler Intrinsic Equivalent" {
+                    context.last_category = Category::IntrinsicEquivalent;
+                }
                 continue;
             }
-        }
-        if context.last_category == Category::IntrinsicEquivalentStart {
-            if context.line() == " Compiler Intrinsic Equivalent" {
-                context.last_category = Category::IntrinsicEquivalent;
-            }
-            continue;
-        }
 
-        parse_about_category(&mut context, category);
+            parse_about_category(&mut context, category);
+        }
     }
 
+    clear_stacked_status(&mut context);
     context.done()
 }
 
