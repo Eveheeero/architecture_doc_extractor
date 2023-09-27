@@ -32,7 +32,9 @@ fn parse_instructions(data: Vec<String>) -> Vec<Instruction> {
             clear_stacked_status(&mut context);
             break;
         }
+        // 라인 읽기
         context.read(&mut iter);
+        // 읽은 라인이 어떤내용인지 파싱
         let category = parse_category(context.line());
 
         if context.last_category == Category::OpcodeDescriptionStart {
