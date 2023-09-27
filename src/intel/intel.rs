@@ -55,65 +55,7 @@ fn parse_instructions(data: Vec<String>) -> Vec<Instruction> {
             continue;
         }
 
-        match category {
-            Category::Summary => {
-                clear_stacked_status(&mut context);
-                // 이전 데이터 등록 (last_category가 NeedIgnore일경우 처음이니까 무시)
-                if context.last_category != Category::NeedIgnore {
-                    dbg!(&context.instruction);
-                    context.next_instruction()
-                }
-                // 인스트럭션과 메인 설명 삽입
-                let mut line = context.line().splitn(2, '-');
-                let title = line.next().unwrap().trim().to_owned();
-                let summary = line.next().unwrap().trim().to_owned();
-                context.instruction.title = title;
-                context.instruction.summary = summary;
-            }
-            Category::OpcodeDescription => {
-                clear_stacked_status(&mut context);
-                context.last_category = category;
-                context.stack(None);
-            }
-            Category::OpcodeDescriptionStart => {
-                clear_stacked_status(&mut context);
-                context.last_category = category;
-                context.stack(None);
-                let stacked = context.clear_stacked_data().join("");
-                context.stack(Some(stacked));
-            }
-            Category::InstructionOperandEncoding => {
-                clear_stacked_status(&mut context);
-                context.last_category = category;
-            }
-            Category::Description => {
-                clear_stacked_status(&mut context);
-                context.last_category = category;
-            }
-            Category::Operation => {
-                clear_stacked_status(&mut context);
-                context.last_category = category;
-            }
-            Category::FlagsAffected => {
-                clear_stacked_status(&mut context);
-                context.last_category = category;
-            }
-            Category::Exceptions => {
-                clear_stacked_status(&mut context);
-                context.stack(None);
-                context.last_category = category;
-            }
-            Category::None => context.stack(None),
-            Category::NeedIgnore => {}
-            Category::IntrinsicEquivalent => {
-                clear_stacked_status(&mut context);
-                context.last_category = category;
-            }
-            Category::IntrinsicEquivalentStart => {
-                clear_stacked_status(&mut context);
-                context.last_category = category;
-            }
-        };
+        parse_about_category(&mut context, category);
     }
 
     context.done()
@@ -158,5 +100,68 @@ fn clear_stacked_status(context: &mut ParsingContext) {
 
         Category::NeedIgnore => {}
         _ => unreachable!(),
+    }
+}
+
+/// 카테고리에 대해 파싱을 진행한다.
+fn parse_about_category(context: &mut ParsingContext, category: Category) {
+    match category {
+        Category::Summary => {
+            clear_stacked_status(context);
+            // 이전 데이터 등록 (last_category가 NeedIgnore일경우 처음이니까 무시)
+            if context.last_category != Category::NeedIgnore {
+                dbg!(&context.instruction);
+                context.next_instruction()
+            }
+            // 인스트럭션과 메인 설명 삽입
+            let mut line = context.line().splitn(2, '-');
+            let title = line.next().unwrap().trim().to_owned();
+            let summary = line.next().unwrap().trim().to_owned();
+            context.instruction.title = title;
+            context.instruction.summary = summary;
+        }
+        Category::OpcodeDescription => {
+            clear_stacked_status(context);
+            context.last_category = category;
+            context.stack(None);
+        }
+        Category::OpcodeDescriptionStart => {
+            clear_stacked_status(context);
+            context.last_category = category;
+            context.stack(None);
+            let stacked = context.clear_stacked_data().join("");
+            context.stack(Some(stacked));
+        }
+        Category::InstructionOperandEncoding => {
+            clear_stacked_status(context);
+            context.last_category = category;
+        }
+        Category::Description => {
+            clear_stacked_status(context);
+            context.last_category = category;
+        }
+        Category::Operation => {
+            clear_stacked_status(context);
+            context.last_category = category;
+        }
+        Category::FlagsAffected => {
+            clear_stacked_status(context);
+            context.last_category = category;
+        }
+        Category::Exceptions => {
+            clear_stacked_status(context);
+            context.stack(None);
+            context.last_category = category;
+        }
+        Category::None => context.stack(None),
+        Category::NeedIgnore => {}
+        Category::IntrinsicEquivalent => {
+            clear_stacked_status(context);
+            context.last_category = category;
+        }
+        Category::IntrinsicEquivalentStart => {
+            clear_stacked_status(context);
+            context.last_category = category;
+        }
     }
 }
