@@ -35,6 +35,8 @@ fn parse_instructions(data: Vec<Vec<String>>) -> Vec<Instruction> {
 
     for page in data.into_iter() {
         let mut iter = page.into_iter().peekable();
+        context.last_category = context.last_plain_category;
+
         loop {
             if iter.peek().is_none() {
                 // 기존내용 마무리
@@ -91,24 +93,33 @@ fn clear_stacked_status(context: &mut ParsingContext) {
             context.clear_stacked_data();
         }
         Category::Description => {
-            context.instruction.description = context.clear_stacked_data();
+            let mut stacked = context.clear_stacked_data();
+            context.instruction.description.append(&mut stacked);
         }
         Category::Operation => {
-            context.instruction.operation = context.clear_stacked_data().join("");
+            let stacked = context.clear_stacked_data().join("");
+            context.instruction.operation.push_str(&stacked);
         }
         Category::FlagsAffected => {
-            context.instruction.flag_affected = context.clear_stacked_data().join("");
+            let stacked = context.clear_stacked_data().join("");
+            context.instruction.flag_affected.push_str(&stacked);
         }
         Category::Exceptions => {
             // stacked_content를 다른것으로 파싱
             let mut stacked_content = context.clear_stacked_data();
-            context
-                .instruction
-                .exceptions
-                .insert(stacked_content.pop().unwrap(), stacked_content);
+            if stacked_content.len() >= 2 {
+                context
+                    .instruction
+                    .exceptions
+                    .insert(stacked_content.pop().unwrap(), stacked_content);
+            }
         }
         Category::IntrinsicEquivalent => {
-            context.instruction.c_and_cpp_equivalent = context.clear_stacked_data();
+            let mut stacked = context.clear_stacked_data();
+            context
+                .instruction
+                .c_and_cpp_equivalent
+                .append(&mut stacked);
         }
 
         Category::NeedIgnore => {}
