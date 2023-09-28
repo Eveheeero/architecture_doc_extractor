@@ -7,6 +7,8 @@ pub(super) struct ParsingContext {
     line: String,
     /// 이전 파싱 카테고리
     pub(super) last_category: Category,
+    /// 평문으로 이루어진 마지막 카테고리 (페이지가 변경되었을 때 해당 카테고리인 셈 친다.)
+    pub(super) last_plain_category: Category,
     /// 파싱할 수 없어 임시로 저장된 내용
     stacked_content: Vec<String>,
     pub(super) instruction: Instruction,
@@ -18,6 +20,7 @@ impl Default for ParsingContext {
             result: Vec::new(),
             line: String::new(),
             last_category: Category::NeedIgnore,
+            last_plain_category: Category::NeedIgnore,
             stacked_content: Vec::new(),
             instruction: Instruction::default(),
         }
@@ -39,6 +42,21 @@ impl ParsingContext {
             self.stacked_content.push(data);
         } else {
             self.stacked_content.push(self.line.clone());
+        }
+    }
+    pub(super) fn set_last_category(&mut self, category: Category) {
+        self.last_category = category;
+        match self.last_category {
+            Category::Summary
+            | Category::IntrinsicEquivalent
+            | Category::Exceptions
+            | Category::Operation
+            | Category::Description
+            | Category::FlagsAffected
+            | Category::IntrinsicEquivalentStart => {
+                self.last_plain_category = self.last_category;
+            }
+            _ => {}
         }
     }
     /// 스택에 저장된 내용을 가져온다.

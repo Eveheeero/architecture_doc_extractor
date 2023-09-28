@@ -135,46 +135,46 @@ fn parse_about_category(context: &mut ParsingContext, category: Category) {
         }
         Category::OpcodeDescription => {
             clear_stacked_status(context);
-            context.last_category = category;
+            context.set_last_category(category);
             context.stack(None);
         }
         Category::OpcodeDescriptionStart => {
             clear_stacked_status(context);
-            context.last_category = category;
+            context.set_last_category(category);
             context.stack(None);
             let stacked = context.clear_stacked_data().join("");
             context.stack(Some(stacked));
         }
         Category::InstructionOperandEncoding => {
             clear_stacked_status(context);
-            context.last_category = category;
+            context.set_last_category(category);
         }
         Category::Description => {
             clear_stacked_status(context);
-            context.last_category = category;
+            context.set_last_category(category);
         }
         Category::Operation => {
             clear_stacked_status(context);
-            context.last_category = category;
+            context.set_last_category(category);
         }
         Category::FlagsAffected => {
             clear_stacked_status(context);
-            context.last_category = category;
+            context.set_last_category(category);
         }
         Category::Exceptions => {
             clear_stacked_status(context);
             context.stack(None);
-            context.last_category = category;
+            context.set_last_category(category);
         }
         Category::None => context.stack(None),
         Category::NeedIgnore => {}
         Category::IntrinsicEquivalent => {
             clear_stacked_status(context);
-            context.last_category = category;
+            context.set_last_category(category);
         }
         Category::IntrinsicEquivalentStart => {
             clear_stacked_status(context);
-            context.last_category = category;
+            context.set_last_category(category);
         }
     }
 }
