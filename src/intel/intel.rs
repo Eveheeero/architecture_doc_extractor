@@ -18,15 +18,17 @@ fn extract_text() -> Vec<Vec<String>> {
     for index in 129..=2266 {
         texts.push(print_pages(&doc, index));
     }
-    std::fs::write(
-        "intel.txt",
-        texts
-            .iter()
-            .flat_map(|x| x.to_owned())
-            .collect::<Vec<_>>()
-            .join("\n"),
-    )
-    .unwrap();
+    if !std::fs::metadata("intel.txt").is_ok() {
+        std::fs::write(
+            "intel.txt",
+            texts
+                .iter()
+                .flat_map(|x| x.to_owned())
+                .collect::<Vec<_>>()
+                .join("\n"),
+        )
+        .unwrap();
+    }
     texts
 }
 
@@ -61,13 +63,13 @@ fn parse_instructions(data: Vec<Vec<String>>) -> Vec<Instruction> {
                     // OpcodeDescription 파싱
                     // TODO stacked_content로 OpcodeDescription 테이블 가져옴
                     context.clear_stacked_data();
-                    context.last_category = Category::OpcodeDescription;
+                    context.set_last_category(Category::OpcodeDescription);
                     continue;
                 }
             }
             if context.last_category == Category::IntrinsicEquivalentStart {
                 if context.line() == " Compiler Intrinsic Equivalent" {
-                    context.last_category = Category::IntrinsicEquivalent;
+                    context.set_last_category(Category::IntrinsicEquivalent);
                 }
                 continue;
             }

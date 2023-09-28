@@ -41,7 +41,7 @@ pub(super) fn parse_category(data: impl AsRef<str>) -> Category {
     static EXCEPTIONS: OnceLock<Regex> = OnceLock::new();
     static IGNORE: OnceLock<Regex> = OnceLock::new();
     static INTRINSIC_EQUIVALENT_START: OnceLock<Regex> = OnceLock::new();
-    let summary = SUMMARY.get_or_init(|| Regex::new("^[^a-z0-9 ][^a-z ]*-.+$").unwrap());
+    let summary = SUMMARY.get_or_init(|| Regex::new("^[^a-z0-9 ][^a-z ]* ?-.+$").unwrap());
     // Opcode로 시작해서 여러 줄 거쳐서 Description으로 끝나는 경우
     let opcode_description_start =
         OPCODE_DESCRIPTION_START.get_or_init(|| Regex::new("^Opcode").unwrap());
@@ -53,7 +53,7 @@ pub(super) fn parse_category(data: impl AsRef<str>) -> Category {
     let operation = OPERATION.get_or_init(|| Regex::new("^Operation$").unwrap());
     let flag_effected = FLAGAFFECTED.get_or_init(|| Regex::new("^Flags Affected$").unwrap());
     let exceptions = EXCEPTIONS.get_or_init(|| {
-        Regex::new("^(.* Mode Exceptions|SIMD Floating-Point Exceptions|Other Exceptions)$")
+        Regex::new("^(.* Mode Exceptions|SIMD Floating-Point Exceptions|Other Exceptions|Exceptions)$")
             .unwrap()
     });
     let ignore = IGNORE.get_or_init(|| Regex::new("(^Instruction Operand Encoding$)").unwrap());
