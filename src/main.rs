@@ -53,7 +53,7 @@ fn print_pages(doc: &Document, page: u32) -> Vec<String> {
         result.push(line);
     });
     // ignore header, footer, page number
-    result[3..].to_vec()
+    result
 }
 
 fn extract_string<'obj>(
