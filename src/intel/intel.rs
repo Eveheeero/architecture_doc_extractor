@@ -35,6 +35,7 @@ fn parse_instructions(data: Vec<Vec<String>>) -> Vec<Instruction> {
 
     for page in data.into_iter() {
         let mut iter = page.into_iter().peekable();
+        let mut page_first = true;
         context.last_category = context.last_plain_category;
 
         loop {
@@ -46,8 +47,11 @@ fn parse_instructions(data: Vec<Vec<String>>) -> Vec<Instruction> {
             // 라인 읽기
             context.read(&mut iter);
             // 읽은 라인이 어떤내용인지 파싱
-            let category = parse_category(context.line());
+            let mut category = parse_category(context.line());
 
+            if category == Category::Summary && !page_first {
+                category = Category::None;
+            }
             if context.last_category == Category::OpcodeDescriptionStart {
                 if !context.line().ends_with("Description") {
                     // OpcodeDescriptionStart가 왔으면 end가 올때까지 무시
@@ -68,6 +72,7 @@ fn parse_instructions(data: Vec<Vec<String>>) -> Vec<Instruction> {
                 continue;
             }
 
+            page_first = false;
             parse_about_category(&mut context, category);
         }
     }
@@ -79,6 +84,15 @@ fn parse_instructions(data: Vec<Vec<String>>) -> Vec<Instruction> {
 /// 이전까지 파싱했던 내용을 저장한다.
 fn clear_stacked_status(context: &mut ParsingContext) {
     match context.last_category {
+        Category::Summary => {
+            // 인스트럭션과 메인 설명 삽입
+            let stacked = context.clear_stacked_data().join("");
+            let mut line = stacked.splitn(2, '-');
+            let title = line.next().unwrap().trim().to_owned();
+            let summary = line.next().unwrap().trim().to_owned();
+            context.instruction.title = title;
+            context.instruction.summary = summary;
+        }
         Category::OpcodeDescription => {
             let content = context.clear_stacked_data().join("");
             // instruction에 저장
@@ -108,10 +122,11 @@ fn clear_stacked_status(context: &mut ParsingContext) {
             // stacked_content를 다른것으로 파싱
             let mut stacked_content = context.clear_stacked_data();
             if stacked_content.len() >= 2 {
+                let title = stacked_content.remove(0);
                 context
                     .instruction
                     .exceptions
-                    .insert(stacked_content.pop().unwrap(), stacked_content);
+                    .insert(title, stacked_content);
             }
         }
         Category::IntrinsicEquivalent => {
@@ -137,12 +152,8 @@ fn parse_about_category(context: &mut ParsingContext, category: Category) {
                 dbg!(&context.instruction);
                 context.next_instruction()
             }
-            // 인스트럭션과 메인 설명 삽입
-            let mut line = context.line().splitn(2, '-');
-            let title = line.next().unwrap().trim().to_owned();
-            let summary = line.next().unwrap().trim().to_owned();
-            context.instruction.title = title;
-            context.instruction.summary = summary;
+            context.set_last_category(category);
+            context.stack(None);
         }
         Category::OpcodeDescription => {
             clear_stacked_status(context);

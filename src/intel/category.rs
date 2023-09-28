@@ -40,7 +40,6 @@ pub(super) fn parse_category(data: impl AsRef<str>) -> Category {
     static FLAGAFFECTED: OnceLock<Regex> = OnceLock::new();
     static EXCEPTIONS: OnceLock<Regex> = OnceLock::new();
     static IGNORE: OnceLock<Regex> = OnceLock::new();
-    static INTRINSIC_EQUIVALENT: OnceLock<Regex> = OnceLock::new();
     static INTRINSIC_EQUIVALENT_START: OnceLock<Regex> = OnceLock::new();
     let summary = SUMMARY.get_or_init(|| Regex::new("^[^a-z0-9 ][^a-z ]*-.+$").unwrap());
     // Opcode로 시작해서 여러 줄 거쳐서 Description으로 끝나는 경우
@@ -53,10 +52,12 @@ pub(super) fn parse_category(data: impl AsRef<str>) -> Category {
     let description = DESCRIPTION.get_or_init(|| Regex::new("^Description$").unwrap());
     let operation = OPERATION.get_or_init(|| Regex::new("^Operation$").unwrap());
     let flag_effected = FLAGAFFECTED.get_or_init(|| Regex::new("^Flags Affected$").unwrap());
-    let exceptions = EXCEPTIONS.get_or_init(|| Regex::new("^.* Mode Exceptions$").unwrap());
+    let exceptions = EXCEPTIONS.get_or_init(|| {
+        Regex::new("^(.* Mode Exceptions|SIMD Floating-Point Exceptions|Other Exceptions)$")
+            .unwrap()
+    });
     let ignore = IGNORE.get_or_init(|| Regex::new("(^Instruction Operand Encoding$)").unwrap());
-    let intrinsic_equivalent = INTRINSIC_EQUIVALENT
-        .get_or_init(|| Regex::new("^Intel C/C++ Compiler Intrinsic Equivalent$").unwrap());
+    let intrinsic_equivalent = "Intel C/C++ Compiler Intrinsic Equivalent";
     let intrinsic_equivalent_start =
         INTRINSIC_EQUIVALENT_START.get_or_init(|| Regex::new("^Intel C/C$").unwrap());
 
@@ -73,7 +74,7 @@ pub(super) fn parse_category(data: impl AsRef<str>) -> Category {
         () if flag_effected.is_match(data) => Category::FlagsAffected,
         () if exceptions.is_match(data) => Category::Exceptions,
         () if ignore.is_match(data) => Category::NeedIgnore,
-        () if intrinsic_equivalent.is_match(data) => Category::IntrinsicEquivalent,
+        () if intrinsic_equivalent == data => Category::IntrinsicEquivalent,
         () if intrinsic_equivalent_start.is_match(data) => Category::IntrinsicEquivalentStart,
         _ => Category::None,
     }
