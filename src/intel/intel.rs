@@ -13,7 +13,7 @@ pub fn main() {
         let data = extract_text(from, to);
         result.append(&mut parse_instructions(data));
     }
-    dbg!(result);
+    blocks_into_string(result);
 }
 
 fn extract_text(from: u32, to: u32) -> Vec<Vec<String>> {
@@ -212,4 +212,18 @@ fn parse_about_category(context: &mut ParsingContext, category: Category) {
             context.set_last_category(category);
         }
     }
+}
+
+fn blocks_into_string(blocks: Vec<Instruction>) {
+    blocks.into_iter().for_each(block_into_string)
+}
+
+fn block_into_string(block: Instruction) {
+    let instruction = block.title.to_owned();
+    let description: Vec<String> = block.into_string();
+    std::fs::write(
+        format!("result/intel/{instruction}"),
+        description.join("\n"),
+    )
+    .expect(format!("{} 파일 생성 실패", instruction).as_str());
 }

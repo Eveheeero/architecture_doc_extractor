@@ -27,3 +27,4 @@ Cargo.lock
 *.vsix
 
 intel.txt
+result/*

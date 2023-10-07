@@ -19,3 +19,9 @@ pub(super) struct Instruction {
     /// c/c++ 대체함수
     pub(super) c_and_cpp_equivalent: Vec<String>,
 }
+
+impl Instruction {
+    pub(super) fn into_string(self) -> Vec<String> {
+        todo!()
+    }
+}
