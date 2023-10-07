@@ -8,14 +8,18 @@ use context::ParsingContext;
 use result::Instruction;
 
 pub fn main() {
-    let data = extract_text();
-    let _ = parse_instructions(data);
+    let mut result = Vec::new();
+    for (from, to) in [(129, 734)] {
+        let data = extract_text(from, to);
+        result.append(&mut parse_instructions(data));
+    }
+    dbg!(result);
 }
 
-fn extract_text() -> Vec<Vec<String>> {
+fn extract_text(from: u32, to: u32) -> Vec<Vec<String>> {
     let doc = lopdf::Document::load_mem(include_bytes!("intel.pdf")).unwrap();
     let mut texts = Vec::new();
-    for index in 129..=2266 {
+    for index in from..=to {
         texts.push(print_pages(&doc, index));
     }
     if !std::fs::metadata("intel.txt").is_ok() {
@@ -75,7 +79,7 @@ fn parse_instructions(data: Vec<Vec<String>>) -> Vec<Instruction> {
                 }
             }
             if context.last_category == Category::IntrinsicEquivalentStart {
-                if context.line() == " Compiler Intrinsic Equivalent" {
+                if context.line().contains(" Compiler Intrinsic Equivalent") {
                     context.set_last_category(Category::IntrinsicEquivalent);
                 }
                 continue;
