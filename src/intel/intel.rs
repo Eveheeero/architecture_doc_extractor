@@ -40,6 +40,12 @@ fn parse_instructions(data: Vec<Vec<String>>) -> Vec<Instruction> {
         let mut page_first = true;
         context.last_category = context.last_plain_category;
         // 페이지당 푸터나 헤더때문에 3줄, 4줄씩 지워야함
+        loop {
+            let line = iter.next().unwrap();
+            if line.starts_with("Vol. ") || line.ends_with("Vol. 2A") {
+                break;
+            }
+        }
 
         loop {
             if iter.peek().is_none() {
