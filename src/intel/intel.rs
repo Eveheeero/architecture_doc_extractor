@@ -6,6 +6,7 @@ use crate::print_pages;
 use category::{parse_category, Category};
 use context::ParsingContext;
 use result::Instruction;
+use std::sync::Once;
 
 pub fn main() {
     let mut result = Vec::new();
@@ -221,8 +222,12 @@ fn blocks_into_string(blocks: Vec<Instruction>) {
 fn block_into_string(block: Instruction) {
     let instruction = block.title.to_owned();
     let description: Vec<String> = block.into_string();
+    static INIT_DIRECTORY: Once = Once::new();
+    INIT_DIRECTORY.call_once(|| {
+        std::fs::create_dir_all("result/intel").expect("베이스 디렉토리 생성 불가");
+    });
     std::fs::write(
-        format!("result/intel/{instruction}"),
+        format!("result/intel/{instruction}.md"),
         description.join("\n"),
     )
     .expect(format!("{} 파일 생성 실패", instruction).as_str());
