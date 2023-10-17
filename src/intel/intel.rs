@@ -10,7 +10,7 @@ use std::sync::Once;
 
 pub fn main() {
     let mut result = Vec::new();
-    for (from, to) in [(129, 734)] {
+    for (from, to) in [(129, 734), (742, 1476), (1481, 2196), (2198, 2266)] {
         let data = extract_text(from, to);
         result.append(&mut parse_instructions(data));
     }
@@ -19,13 +19,15 @@ pub fn main() {
 
 fn extract_text(from: u32, to: u32) -> Vec<Vec<String>> {
     let doc = lopdf::Document::load_mem(include_bytes!("intel.pdf")).unwrap();
-    let mut texts = Vec::new();
-    for index in from..=to {
-        texts.push(print_pages(&doc, index));
-    }
-    if !std::fs::metadata("intel.txt").is_ok() {
+    use rayon::prelude::*;
+    let texts: Vec<Vec<String>> = (from..=to)
+        .into_par_iter()
+        .map(|index| print_pages(&doc, index))
+        .collect();
+    let file_name = format!("intel{from}_{to}.txt");
+    if !std::fs::metadata(&file_name).is_ok() {
         std::fs::write(
-            "intel.txt",
+            file_name,
             texts
                 .iter()
                 .flat_map(|x| x.to_owned())
