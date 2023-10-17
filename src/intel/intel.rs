@@ -226,9 +226,11 @@ fn block_into_string(block: Instruction) {
     INIT_DIRECTORY.call_once(|| {
         std::fs::create_dir_all("result/intel").expect("베이스 디렉토리 생성 불가");
     });
-    std::fs::write(
-        format!("result/intel/{instruction}.md"),
-        description.join("\n"),
-    )
-    .expect(format!("{} 파일 생성 실패", instruction).as_str());
+    for instruction in instruction.split('/') {
+        std::fs::write(
+            format!("result/intel/{instruction}.md"),
+            description.join("\n"),
+        )
+        .expect(format!("{} 파일 생성 실패", instruction).as_str());
+    }
 }
