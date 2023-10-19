@@ -108,6 +108,11 @@ fn clear_stacked_status(context: &mut ParsingContext) {
         Category::Summary => {
             // 인스트럭션과 메인 설명 삽입
             let stacked = context.clear_stacked_data().join("");
+            if stacked.is_empty() {
+                // 인스트럭션 영역이 비어서 스킵
+                dbg!(&context.instruction.title);
+                return;
+            }
             let mut line = stacked.splitn(2, '-');
             let title = line.next().unwrap().trim().to_owned();
             let summary = line.next().unwrap().trim().to_owned();
@@ -170,7 +175,8 @@ fn parse_about_category(context: &mut ParsingContext, category: Category) {
             clear_stacked_status(context);
             // 이전 데이터 등록 (last_category가 NeedIgnore일경우 처음이니까 무시)
             if context.last_category != Category::NeedIgnore {
-                dbg!(&context.instruction);
+                // 아래의 인스트럭션을 저장
+                dbg!(&context.instruction.title);
                 context.next_instruction()
             }
             context.set_last_category(category);
