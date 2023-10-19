@@ -100,3 +100,20 @@ fn extract_string<'obj>(
         Object::Reference(o) => extract_string(doc, doc.get_object(*o).unwrap()),
     }
 }
+
+#[test]
+fn extract_page() {
+    let doc = lopdf::Document::load("src/intel/intel.pdf").unwrap();
+    let pages = doc.get_pages();
+    let page = pages.get(&129).unwrap();
+    let page_contents = doc.get_page_contents(*page);
+    let page_contents = doc
+        .get_object(page_contents[0])
+        .unwrap()
+        .as_stream()
+        .unwrap();
+    let contents = Content::decode(&page_contents.decompressed_content().unwrap()).unwrap();
+    for operation in contents.operations {
+        println!("{} {:?}", operation.operator, operation.operands);
+    }
+}
