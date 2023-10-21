@@ -2,7 +2,7 @@ mod category;
 mod context;
 mod result;
 
-use crate::print_pages;
+use crate::pdf::page_to_texts;
 use category::{parse_category, Category};
 use context::ParsingContext;
 use result::Instruction;
@@ -22,7 +22,7 @@ fn extract_text(from: u32, to: u32) -> Vec<Vec<String>> {
     use rayon::prelude::*;
     let texts: Vec<Vec<String>> = (from..=to)
         .into_par_iter()
-        .map(|index| print_pages(&doc, index))
+        .map(|index| page_to_texts(&doc, index))
         .collect();
     let file_name = format!("intel{from}_{to}.txt");
     if !std::fs::metadata(&file_name).is_ok() {

@@ -1,4 +1,9 @@
 use lopdf::{content::Content, Document};
+use rayon::prelude::*;
+
+pub(crate) fn page_to_texts(doc: &Document, page: u32) -> Vec<String> {
+    super::operator_to_texts(doc, get_page_contents(doc, page).operations)
+}
 
 pub(crate) fn get_page_contents(doc: &Document, page: u32) -> Content {
     let binding = doc.get_pages();
