@@ -1,5 +1,6 @@
 use lopdf::{content::Operation, Document, Object};
 use rayon::prelude::*;
+use std::sync::Mutex;
 
 /// pdf의 TJ operator에서 문자열을 추출한다.
 /// TJ ex -> ["abc", 3(공백사이즈), "def"] -> "abc    def"
@@ -67,14 +68,33 @@ pub(crate) fn operator_to_texts(
         .collect()
 }
 
+fn extract_num(obj: &Object) -> f32 {
+    match obj {
+        Object::Integer(o) => *o as f32,
+        Object::Real(o) => *o,
+        _ => unimplemented!(),
+    }
+}
+
 pub(crate) fn operator_to_texts2(
     doc: &Document,
     data: impl IntoParallelIterator<Item = Operation>,
 ) -> Vec<String> {
-    let mut last_position = (0.0, 0.0);
-    data.into_par_iter()
+    struct Text {
+        text: String,
+        start_position: (f32, f32),
+    }
+    let last_position = Mutex::new((0.0, 0.0));
+    let mut result: Vec<Text> = data
+        .into_par_iter()
         .filter(|op| op.operator == "Tj" || op.operator == "TD" || op.operator == "TJ")
-        .map(|op| {
+        .filter_map(|op| {
+            if op.operator == "TD" {
+                *last_position.lock().unwrap() =
+                    (extract_num(&op.operands[0]), extract_num(&op.operands[1]));
+                return None;
+            }
+
             let line = op
                 .operands
                 .iter()
@@ -102,7 +122,20 @@ pub(crate) fn operator_to_texts2(
                 .replace("\u{96}", "-")
                 .replace("\u{97}", "-")
                 .replace("\u{8a}", "-");
-            line
+
+            Some(Text {
+                text: line,
+                start_position: *last_position.lock().unwrap(),
+            })
         })
-        .collect()
+        .collect();
+    result.sort_by(|a, b| {
+        let y = a.start_position.1.partial_cmp(&b.start_position.1).unwrap();
+        if y == std::cmp::Ordering::Equal {
+            a.start_position.0.partial_cmp(&b.start_position.0).unwrap()
+        } else {
+            y
+        }
+    });
+    result.into_iter().map(|x| x.text).collect()
 }
