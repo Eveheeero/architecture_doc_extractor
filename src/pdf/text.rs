@@ -82,15 +82,31 @@ pub(crate) fn operator_to_texts2(
 ) -> Vec<String> {
     struct Text {
         text: String,
+        /// (x, -y)
         start_position: (f32, f32),
     }
     let mut last_position = (0.0, 0.0);
     let mut result: Vec<Text> = data
         .into_iter()
-        .filter(|op| op.operator == "Tj" || op.operator == "TD" || op.operator == "TJ")
+        .filter(|op| {
+            matches!(
+                op.operator.as_str(),
+                "Tj" | "TJ" | "TD" | "Td" | "Tm" | "Tlm"
+            )
+        })
         .filter_map(|op| {
-            if op.operator == "TD" {
-                last_position = (extract_num(&op.operands[0]), extract_num(&op.operands[1]));
+            if matches!(op.operator.as_str(), "TD" | "Td") {
+                last_position.0 += extract_num(&op.operands[0]);
+                last_position.1 += extract_num(&op.operands[1]);
+                return None;
+            } else if matches!(op.operator.as_str(), "Tm" | "Tlm") {
+                if extract_num(&op.operands[0]) == extract_num(&op.operands[3])
+                    && extract_num(&op.operands[1]) == 0.0
+                    && extract_num(&op.operands[2]) == 0.0
+                {
+                    last_position.0 = extract_num(&op.operands[4]);
+                    last_position.0 = extract_num(&op.operands[5]);
+                }
                 return None;
             }
 
@@ -129,7 +145,12 @@ pub(crate) fn operator_to_texts2(
         })
         .collect();
     result.sort_by(|a, b| {
-        let y = a.start_position.1.partial_cmp(&b.start_position.1).unwrap();
+        let y = a
+            .start_position
+            .1
+            .partial_cmp(&b.start_position.1)
+            .unwrap()
+            .reverse();
         if y == std::cmp::Ordering::Equal {
             a.start_position.0.partial_cmp(&b.start_position.0).unwrap()
         } else {

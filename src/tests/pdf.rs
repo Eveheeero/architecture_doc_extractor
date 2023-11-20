@@ -10,11 +10,15 @@ fn extract_page() {
 }
 
 #[test]
+#[ignore = "raw pdf를 보고싶을때 사용"]
 fn print_page() {
     let doc = lopdf::Document::load("src/intel/intel.pdf").unwrap();
     let contents = crate::pdf::get_page_contents(&doc, 129);
 
     for page in contents.operations {
+        if !matches!(page.operator.as_str(), "Tj" | "TJ" | "TD" | "Tm" | "Tlm") {
+            continue;
+        }
         println!("{:?}", page);
     }
 }
