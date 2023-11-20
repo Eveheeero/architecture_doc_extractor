@@ -78,20 +78,19 @@ fn extract_num(obj: &Object) -> f32 {
 
 pub(crate) fn operator_to_texts2(
     doc: &Document,
-    data: impl IntoParallelIterator<Item = Operation>,
+    data: impl IntoIterator<Item = Operation>,
 ) -> Vec<String> {
     struct Text {
         text: String,
         start_position: (f32, f32),
     }
-    let last_position = Mutex::new((0.0, 0.0));
+    let mut last_position = (0.0, 0.0);
     let mut result: Vec<Text> = data
-        .into_par_iter()
+        .into_iter()
         .filter(|op| op.operator == "Tj" || op.operator == "TD" || op.operator == "TJ")
         .filter_map(|op| {
             if op.operator == "TD" {
-                *last_position.lock().unwrap() =
-                    (extract_num(&op.operands[0]), extract_num(&op.operands[1]));
+                last_position = (extract_num(&op.operands[0]), extract_num(&op.operands[1]));
                 return None;
             }
 
@@ -125,7 +124,7 @@ pub(crate) fn operator_to_texts2(
 
             Some(Text {
                 text: line,
-                start_position: *last_position.lock().unwrap(),
+                start_position: last_position,
             })
         })
         .collect();

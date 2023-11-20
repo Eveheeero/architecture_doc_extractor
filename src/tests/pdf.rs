@@ -10,6 +10,16 @@ fn extract_page() {
 }
 
 #[test]
+fn print_page() {
+    let doc = lopdf::Document::load("src/intel/intel.pdf").unwrap();
+    let contents = crate::pdf::get_page_contents(&doc, 129);
+
+    for page in contents.operations {
+        println!("{:?}", page);
+    }
+}
+
+#[test]
 fn print_page_contents() {
     let doc = lopdf::Document::load("src/intel/intel.pdf").unwrap();
     let contents = crate::pdf::get_page_contents(&doc, 129);
