@@ -96,8 +96,8 @@ pub(crate) fn operator_to_texts2(
         })
         .filter_map(|op| {
             if matches!(op.operator.as_str(), "TD" | "Td") {
-                last_position.0 += extract_num(&op.operands[0]);
-                last_position.1 += extract_num(&op.operands[1]);
+                last_position.0 += extract_num(&op.operands[0]) * 9.0; // Why 9.0? or 10.0?
+                last_position.1 += extract_num(&op.operands[1]) * 9.0;
                 return None;
             } else if matches!(op.operator.as_str(), "Tm" | "Tlm") {
                 if extract_num(&op.operands[0]) == extract_num(&op.operands[3])
