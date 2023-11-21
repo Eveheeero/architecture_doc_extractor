@@ -23,3 +23,12 @@ fn print_page_contents() {
         println!("{} {:?}", operation.operator, operation.operands);
     }
 }
+
+#[test]
+fn extract_page_texts() {
+    let doc = lopdf::Document::load("src/intel/intel.pdf").unwrap();
+    let texts = crate::pdf::page_to_texts(&doc, 129);
+    for text in texts {
+        println!("{}", text);
+    }
+}

@@ -105,7 +105,7 @@ pub(crate) fn operator_to_texts2(
                     && extract_num(&op.operands[2]) == 0.0
                 {
                     last_position.0 = extract_num(&op.operands[4]);
-                    last_position.0 = extract_num(&op.operands[5]);
+                    last_position.1 = extract_num(&op.operands[5]);
                 }
                 return None;
             }
