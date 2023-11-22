@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use lopdf::{content::Operation, Document, Object};
 use rayon::prelude::*;
 use std::sync::Mutex;
@@ -29,7 +31,8 @@ pub(crate) fn extract_tj<'obj>(
     }
 }
 
-pub(crate) fn operator_to_texts(
+/// pdf 내부 operator순서에 따라 텍스트 파싱
+pub(crate) fn operator_to_texts_align_with_pdf_inner_operator(
     doc: &Document,
     data: impl IntoParallelIterator<Item = Operation>,
 ) -> Vec<String> {
@@ -76,7 +79,8 @@ fn extract_num(obj: &Object) -> f32 {
     }
 }
 
-pub(crate) fn operator_to_texts2(
+/// pdf 페이지 내부 정렬 순서에 따라 텍스트 파싱
+pub(crate) fn operator_to_texts_align_with_pdf_position(
     doc: &Document,
     data: impl IntoIterator<Item = Operation>,
 ) -> Vec<String> {

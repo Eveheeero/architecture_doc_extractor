@@ -1,8 +1,20 @@
+#![allow(dead_code)]
+
 use lopdf::{content::Content, Document};
 use rayon::prelude::*;
 
-pub(crate) fn page_to_texts(doc: &Document, page: u32) -> Vec<String> {
-    super::operator_to_texts(doc, get_page_contents(doc, page).operations)
+pub(crate) fn page_to_texts_align_with_pdf_inner_operator(
+    doc: &Document,
+    page: u32,
+) -> Vec<String> {
+    super::operator_to_texts_align_with_pdf_inner_operator(
+        doc,
+        get_page_contents(doc, page).operations,
+    )
+}
+
+pub(crate) fn page_to_texts_align_with_pdf_position(doc: &Document, page: u32) -> Vec<String> {
+    super::operator_to_texts_align_with_pdf_position(doc, get_page_contents(doc, page).operations)
 }
 
 pub(crate) fn get_page_contents(doc: &Document, page: u32) -> Content {
