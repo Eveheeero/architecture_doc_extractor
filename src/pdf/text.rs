@@ -84,24 +84,32 @@ pub(crate) fn operator_to_texts_align_with_pdf_position(
     doc: &Document,
     data: impl IntoIterator<Item = Operation>,
 ) -> Vec<String> {
+    #[derive(Debug)]
     struct Text {
         text: String,
         /// (x, -y)
         start_position: (f32, f32),
+        text_width: f32,
+        text_height: f32,
     }
     let mut last_position = (0.0, 0.0);
+    let mut text_height = 0.0;
+    let mut text_width = 0.0;
     let mut result: Vec<Text> = data
         .into_iter()
         .filter(|op| {
             matches!(
                 op.operator.as_str(),
-                "Tj" | "TJ" | "TD" | "Td" | "Tm" | "Tlm"
+                "Tj" | "TJ" | "TD" | "Td" | "Tm" | "Tlm" | "T*"
             )
         })
         .filter_map(|op| {
-            if matches!(op.operator.as_str(), "TD" | "Td") {
-                last_position.0 += extract_num(&op.operands[0]) * 9.0; // Why 9.0? or 10.0?
-                last_position.1 += extract_num(&op.operands[1]) * 9.0;
+            if op.operator == "T*" {
+                last_position.1 -= text_height * 2.0;
+                return None;
+            } else if matches!(op.operator.as_str(), "Td" | "TD") {
+                last_position.0 += extract_num(&op.operands[0]) * text_width;
+                last_position.1 += extract_num(&op.operands[1]) * text_height;
                 return None;
             } else if matches!(op.operator.as_str(), "Tm" | "Tlm") {
                 if extract_num(&op.operands[0]) == extract_num(&op.operands[3])
@@ -111,6 +119,8 @@ pub(crate) fn operator_to_texts_align_with_pdf_position(
                     last_position.0 = extract_num(&op.operands[4]);
                     last_position.1 = extract_num(&op.operands[5]);
                 }
+                text_width = extract_num(&op.operands[0]);
+                text_height = extract_num(&op.operands[3]);
                 return None;
             }
 
@@ -142,9 +152,14 @@ pub(crate) fn operator_to_texts_align_with_pdf_position(
                 .replace("\u{97}", "-")
                 .replace("\u{8a}", "-");
 
+            if false {
+                println!("{} {:?}", op.operator, op.operands);
+            }
             Some(Text {
                 text: line,
                 start_position: last_position,
+                text_width,
+                text_height,
             })
         })
         .collect();
