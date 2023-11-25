@@ -27,6 +27,8 @@ pub(super) fn parse_instructions(data: Vec<Vec<String>>) -> Vec<Instruction> {
         }
 
         for line in page.into_iter() {
+            println!("{}", line);
+
             // 인스트럭션 타이틀이면 스킵
             if line.starts_with(&format!("{title}-", title = now.title)) {
                 continue;
