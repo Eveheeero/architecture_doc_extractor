@@ -1,9 +1,10 @@
 mod category;
+mod context;
 
 use super::category::Category;
-use super::context::ParsingContext;
 use super::result::Instruction;
 use category::parse_category;
+use context::ParsingContext;
 
 #[allow(dead_code)]
 pub(super) fn parse_instructions(data: Vec<Vec<String>>) -> Vec<Instruction> {

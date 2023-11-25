@@ -1,7 +1,6 @@
 mod align_with_pdf_inner_operator;
 mod align_with_pdf_position;
 mod category;
-mod context;
 mod result;
 
 use crate::pdf;

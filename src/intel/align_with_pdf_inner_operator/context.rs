@@ -1,4 +1,4 @@
-use super::{category::Category, result::Instruction};
+use crate::intel::{category::Category, result::Instruction};
 
 pub(super) struct ParsingContext {
     /// 현재까지 파싱된 인스트러션
