@@ -105,7 +105,7 @@ pub(crate) fn operator_to_texts_align_with_pdf_position(
         })
         .filter_map(|op| {
             if op.operator == "T*" {
-                last_position.1 -= text_height * 2.0;
+                last_position.1 -= text_height;
                 return None;
             } else if matches!(op.operator.as_str(), "Td" | "TD") {
                 last_position.0 += extract_num(&op.operands[0]) * text_width;
@@ -152,12 +152,14 @@ pub(crate) fn operator_to_texts_align_with_pdf_position(
                 .replace("\u{97}", "-")
                 .replace("\u{8a}", "-");
 
+            let mut text_position = last_position;
+            text_position.1 += text_height;
             if false {
                 println!("{} {:?}", op.operator, op.operands);
             }
             Some(Text {
                 text: line,
-                start_position: last_position,
+                start_position: text_position,
                 text_width,
                 text_height,
             })
