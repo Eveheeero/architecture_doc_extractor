@@ -1,6 +1,9 @@
 mod parse_section;
 
 use super::result::Instruction;
+use regex::Regex;
+#[allow(unused_imports)]
+use tracing::{debug, error, info, trace, warn};
 
 #[derive(PartialEq, Eq)]
 enum Section {
@@ -12,6 +15,7 @@ enum Section {
     Operation,
     FlagsAffected,
     Exceptions(String),
+    FootNote(u8),
     None,
 }
 
@@ -35,7 +39,9 @@ pub(super) fn parse_instructions(data: Vec<Vec<String>>) -> Vec<Instruction> {
     let mut result = Vec::new();
     let mut now = Instruction::default();
     let mut now_section = Section::None;
-    for page in data.into_iter() {
+    for (index, page) in data.into_iter().enumerate() {
+        debug!("{}번째 페이지 파싱중", index);
+
         let (page, operation, summary) = get_operation_summary(&page);
         // 기존 인스트럭션이랑 다르면 푸시
         if operation != now.title {
@@ -48,6 +54,8 @@ pub(super) fn parse_instructions(data: Vec<Vec<String>>) -> Vec<Instruction> {
         }
 
         for line in page.into_iter() {
+            trace!("라인 내용 : {}", line);
+
             /* 현재 섹션에 따라 몇몇 특수처리 */
             if now_section == Section::InstructionsStart {
                 /* Opcode/Instruction/OP가 오는건 37...가 왔을떄 끝 */
@@ -94,6 +102,10 @@ pub(super) fn parse_instructions(data: Vec<Vec<String>>) -> Vec<Instruction> {
                         .unwrap()
                         .push(line.into());
                 }
+                Section::FootNote(num) => {
+                    // 각주로 인식은 하지만 따로 저장하지 않음.
+                    now_section = Section::FootNote(num);
+                }
                 _ => {}
             }
         }
@@ -101,24 +113,41 @@ pub(super) fn parse_instructions(data: Vec<Vec<String>>) -> Vec<Instruction> {
     result
 }
 
+/// 전체 페이지에서, 인스트럭션과 인스트럭션의 설명을 분리한 후, footer 및 header를 제거한 후 반환
 fn get_operation_summary(page: &[String]) -> (&[String], String, String) {
-    let mut lasts = Vec::new();
+    /*
+    Vol. 2A3-55 같은 형식의 문자열 및
+    AESDEC128KL-.... 같은 형색의 문자열을 인식해야함 (여러 줄로 나뉘어 있을 수 있음) (끝에 . 없음)
+     */
+
+    //  Vol. 2A3-55 혹은 3-48Vol. 2A같은 형식의 문자열을 인식
+    let regex1 = Regex::new(r"^Vol\. \d[A-Z]\d-\d+$").unwrap();
+    // AESDEC128KL-.... 같은 형색의 문자열을 인식
+    let regex2 = Regex::new("^([A-Z][A-Z0-9()/]+|INT n/INTO/INT3/INT1)-").unwrap();
+
+    let mut matched1 = false;
+    let mut matched2 = false;
+    let mut title_and_summary = String::new();
     let mut temp = String::new();
     let mut to = page.len();
     for (i, line) in page.iter().rev().enumerate() {
-        if line.contains('-') {
-            lasts.push(line.clone() + &temp);
+        if matched1 && matched2 {
+            to = page.len() - i - 2;
+            break;
+        }
+
+        if regex1.is_match(&line) {
             temp.clear();
-            if lasts.len() == 2 {
-                to = page.len() - i - 1;
-                break;
-            }
+            matched1 = true;
+        } else if regex2.is_match(&line) {
+            title_and_summary = line.clone() + &temp;
+            temp.clear();
+            matched2 = true;
         } else {
             temp = line.clone() + &temp;
         }
     }
 
-    let target = lasts.iter().filter(|x| !x.contains('.')).next().unwrap();
-    let (operation, summary) = target.split_once("-").unwrap();
+    let (operation, summary) = title_and_summary.split_once("-").unwrap();
     (&page[1..to], operation.to_owned(), summary.to_owned())
 }

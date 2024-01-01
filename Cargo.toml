@@ -9,3 +9,5 @@ edition = "2021"
 lopdf = "0.31.0"
 rayon = "1.8.0"
 regex = "1.9.4"
+tracing = { version = "*", features = ["log"] }
+simplelog = "*"
