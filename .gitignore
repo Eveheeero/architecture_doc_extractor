@@ -28,3 +28,4 @@ Cargo.lock
 
 intel*.txt
 result/*
+*.log

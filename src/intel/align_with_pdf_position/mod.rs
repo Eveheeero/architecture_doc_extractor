@@ -121,9 +121,14 @@ fn get_operation_summary(page: &[String]) -> (&[String], String, String) {
      */
 
     //  Vol. 2A3-55 혹은 3-48Vol. 2A같은 형식의 문자열을 인식
-    let regex1 = Regex::new(r"^Vol\. \d[A-Z]\d-\d+$").unwrap();
+    let regex1 = Regex::new(r"^(Vol\. \d[A-Z]\d-\d+|\d-\d+Vol\. \d[A-Z])$").unwrap();
     // AESDEC128KL-.... 같은 형색의 문자열을 인식
-    let regex2 = Regex::new("^([A-Z][A-Z0-9()/]+|INT n/INTO/INT3/INT1)-").unwrap();
+    /*
+    예외목록
+    INT n/INTO/INT3/INT1
+    (ADOX ) (공백 있음)
+     */
+    let regex2 = Regex::new("^([A-Z][A-Z0-9()/]+|INT n/INTO/INT3/INT1|ADOX )-").unwrap();
 
     let mut matched1 = false;
     let mut matched2 = false;
@@ -144,10 +149,12 @@ fn get_operation_summary(page: &[String]) -> (&[String], String, String) {
             temp.clear();
             matched2 = true;
         } else {
+            trace!("Footer 파싱 중 올바르지 않은 라인 발견 : {}", line);
             temp = line.clone() + &temp;
         }
     }
 
+    trace!("Footer내부 인스트럭션 및 설명 : {}", title_and_summary);
     let (operation, summary) = title_and_summary.split_once("-").unwrap();
     (&page[1..to], operation.to_owned(), summary.to_owned())
 }

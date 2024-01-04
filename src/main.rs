@@ -3,10 +3,17 @@ mod intel;
 pub(crate) mod pdf;
 #[cfg(test)]
 mod tests;
-use simplelog::{Config, LevelFilter, SimpleLogger};
+use simplelog::{CombinedLogger, Config, LevelFilter, SimpleLogger, WriteLogger};
+use std::fs::File;
 
 fn main() {
-    SimpleLogger::init(LevelFilter::Debug, Config::default()).unwrap();
+    let log_level = LevelFilter::Trace;
+    let log_config = Config::default();
+    CombinedLogger::init(vec![
+        SimpleLogger::new(log_level, log_config.clone()),
+        WriteLogger::new(log_level, log_config, File::create("last.log").unwrap()),
+    ])
+    .unwrap();
 
     intel::main();
 }
