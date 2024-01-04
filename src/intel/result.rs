@@ -62,6 +62,7 @@ impl Instruction {
         // C/C++ 코드
         // 명령
 
+        result.push("".to_owned());
         result
     }
 
