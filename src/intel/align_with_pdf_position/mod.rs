@@ -127,8 +127,9 @@ fn get_operation_summary(page: &[String]) -> (&[String], String, String) {
     예외목록
     INT n/INTO/INT3/INT1
     (ADOX ) (공백 있음)
+    CMOVcc
      */
-    let regex2 = Regex::new("^([A-Z][A-Z0-9()/]+|INT n/INTO/INT3/INT1|ADOX )-").unwrap();
+    let regex2 = Regex::new("^([A-Z][A-Z0-9()/]+|INT n/INTO/INT3/INT1|ADOX |CMOVcc)-").unwrap();
 
     let mut matched1 = false;
     let mut matched2 = false;

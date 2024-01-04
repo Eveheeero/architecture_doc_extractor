@@ -6,7 +6,13 @@ pub(super) fn parse_now_section(instruction: &Instruction, line: impl AsRef<str>
     let footnote = Regex::new("(\\d)\\.\x01").unwrap();
     let line: &str = line.as_ref();
     match () {
-        () if line.starts_with("Opcode\x01Instruction\x01Op") => Section::InstructionsStart,
+        () if line.starts_with("Opcode\x01")
+            || line.starts_with("Opcode/")
+            || line.starts_with("Opcode /")
+            || line == "Opcode" =>
+        {
+            Section::InstructionsStart
+        }
         () if line.starts_with(&format!("{title}-", title = instruction.title))
             && !line.contains('.') =>
         {
