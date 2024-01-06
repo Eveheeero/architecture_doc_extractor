@@ -13,8 +13,10 @@ pub(super) fn parse_now_section(instruction: &Instruction, line: impl AsRef<str>
         {
             Section::InstructionsStart
         }
-        () if line.starts_with(&format!("{title}-", title = instruction.title))
-            && !line.contains('.') =>
+        () if ((line.starts_with(&format!("{title}-", title = instruction.title))
+            || line.starts_with(&format!("{title} -", title = instruction.title)))
+            && !line.contains('.'))
+            || line == "CMPS/CMPSB/CMPSW/CMPSD/CMP" =>
         {
             Section::TitleStart
         }
