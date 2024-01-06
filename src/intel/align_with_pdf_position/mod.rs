@@ -129,17 +129,22 @@ fn get_operation_summary(page: &[String]) -> (&[String], String, String) {
     INT n/INTO/INT3/INT1
     (ADOX ) (공백 있음)
     FCOMI/FCOMIP/ FUCOMI/FUCOMIP
-
+    PREFETCHh
+    (RORX )
+    
     예외 목록 (뒤에 -가 안들어가는것)
     INT n/INTO/INT3/IN
+    KSHIFTLW/KSHIFTLB/KSHIFTLQ/KSHIF
+    PUNPCKLBW/PUNPCKLWD/PUNPCKLD
      */
-    let regex2 = Regex::new("(^([A-Z]([A-Z0-9()/]|cc)+|INT n/INTO/INT3/INT1|ADOX |FCOMI/FCOMIP/ FUCOMI/FUCOMIP)-|^(INT n/INTO/INT3/IN|KSHIFTLW/KSHIFTLB/KSHIFTLQ/KSHIF)$)").unwrap();
+    let regex2 = Regex::new("(^([A-Z]([A-Z0-9()/]|cc|, ?)+|INT n/INTO/INT3/INT1|ADOX |FCOMI/FCOMIP/ FUCOMI/FUCOMIP|PREFETCHh|RORX )-|^(INT n/INTO/INT3/IN|KSHIFTLW/KSHIFTLB/KSHIFTLQ/KSHIF|PUNPCKLBW/PUNPCKLWD/PUNPCKLD)$)").unwrap();
     /*
     제외목록
     T1 (INT n/INTO/INT3/INT1)
     TLD (KSHIFTLW/KSHIFTLB/KSHIFTLQ/KSHIFTLD)
+    Q/PUNPCKLQDQ (PUNPCKLBW/PUNPCKLWD/PUNPCKLDQ/PUNPCKLQDQ)
      */
-    let regex2_filter = Regex::new("^(T1|TLD)-").unwrap();
+    let regex2_filter = Regex::new("^(T1|TLD|Q/PUNPCKLQDQ)-").unwrap();
 
     let mut matched1 = false;
     let mut matched2 = false;
