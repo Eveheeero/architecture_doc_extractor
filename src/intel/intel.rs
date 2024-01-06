@@ -19,7 +19,7 @@ pub fn main() {
 fn extract_text(from: u32, to: u32) -> Vec<Vec<String>> {
     let doc = lopdf::Document::load_mem(include_bytes!("intel.pdf")).unwrap();
     use rayon::prelude::*;
-    let texts: Vec<Vec<String>> = (from..=to)
+    let texts: Vec<Vec<String>> = (from..to)
         .into_par_iter()
         .map(|index| pdf::page_to_texts_align_with_pdf_position(&doc, index))
         .collect();

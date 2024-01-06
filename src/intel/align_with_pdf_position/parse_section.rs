@@ -2,23 +2,17 @@ use super::Section;
 use crate::intel::result::Instruction;
 use regex::Regex;
 
-pub(super) fn parse_now_section(instruction: &Instruction, line: impl AsRef<str>) -> Section {
+pub(super) fn parse_now_section(_instruction: &Instruction, line: impl AsRef<str>) -> Section {
     let footnote = Regex::new("(\\d)\\.\x01").unwrap();
     let line: &str = line.as_ref();
     match () {
         () if line.starts_with("Opcode\x01")
             || line.starts_with("Opcode/")
             || line.starts_with("Opcode /")
+            || line.starts_with("Opcode*\x01")
             || line == "Opcode" =>
         {
             Section::InstructionsStart
-        }
-        () if ((line.starts_with(&format!("{title}-", title = instruction.title))
-            || line.starts_with(&format!("{title} -", title = instruction.title)))
-            && !line.contains('.'))
-            || line == "CMPS/CMPSB/CMPSW/CMPSD/CMP" =>
-        {
-            Section::TitleStart
         }
         () if line.trim() == "Description" => Section::Description,
         () if line.trim() == "Operation" => Section::Operation,
