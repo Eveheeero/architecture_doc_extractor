@@ -105,7 +105,7 @@ pub(crate) fn operator_to_texts_align_with_pdf_position(
         })
         .filter_map(|op| {
             if op.operator == "T*" {
-                last_position.1 -= text_height;
+                last_position.1 -= text_height * 1.35 /* line factor, if error, change to 1.4 */;
                 return None;
             } else if matches!(op.operator.as_str(), "Td" | "TD") {
                 last_position.0 += extract_num(&op.operands[0]) * text_width;
