@@ -132,22 +132,26 @@ fn get_operation_summary(page: &[String]) -> (&[String], String, String) {
     PREFETCHh
     (RORX )
     VF[,N]M(ADD|SUB)[132,213,231](P|S)H (PH와 SH 따로) (ADD와 SUB 따로)
-    
+
     예외 목록 (뒤에 -가 안들어가는것)
     INT n/INTO/INT3/IN
     KSHIFTLW/KSHIFTLB/KSHIFTLQ/KSHIF
     PUNPCKLBW/PUNPCKLWD/PUNPCKLD
     VEXTRACTI128/VEXTRACTI32x4/VEXTRACTI64x2/VEXTRACTI
     VFMADDSUB132PD/VFMADDSUB213PD/VFMADDSUB231P
+    VFMADDSUB132PH/VFMADDSUB213PH/
+    VFMSUBADD132PD/VFMSUBADD213PD/VFMSUBADD
+    VFMSUBADD132PH/VFMSUBADD213P
      */
-    let regex2 = Regex::new("(^([A-Z]([A-Z0-9()/]|cc|, ?|x\\d{1,2})+|INT n/INTO/INT3/INT1|ADOX |FCOMI/FCOMIP/ FUCOMI/FUCOMIP|PREFETCHh|RORX |VF\\[,N]M(ADD|SUB)\\[132,213,231](P|S)H)-|^(INT n/INTO/INT3/IN|KSHIFTLW/KSHIFTLB/KSHIFTLQ/KSHIF|PUNPCKLBW/PUNPCKLWD/PUNPCKLD|VEXTRACTI128/VEXTRACTI32x4/VEXTRACTI64x2/VEXTRACTI|VFMADDSUB132PD/VFMADDSUB213PD/VFMADDSUB231P)$)").unwrap();
+    let regex2 = Regex::new("(^([A-Z]([A-Z0-9()/]|cc|, ?|x\\d{1,2})+|INT n/INTO/INT3/INT1|ADOX |FCOMI/FCOMIP/ FUCOMI/FUCOMIP|PREFETCHh|RORX |VF\\[,N]M(ADD|SUB)\\[132,213,231](P|S)H)-|^(INT n/INTO/INT3/IN|KSHIFTLW/KSHIFTLB/KSHIFTLQ/KSHIF|PUNPCKLBW/PUNPCKLWD/PUNPCKLD|VEXTRACTI128/VEXTRACTI32x4/VEXTRACTI64x2/VEXTRACTI|VFMADDSUB132PD/VFMADDSUB213PD/VFMADDSUB231P|VFMADDSUB132PH/VFMADDSUB213PH/|VFMSUBADD132PD/VFMSUBADD213PD/VFMSUBADD|VFMSUBADD132PH/VFMSUBADD213P)$)").unwrap();
     /*
     제외목록
     T1 (INT n/INTO/INT3/INT1)
     TLD (KSHIFTLW/KSHIFTLB/KSHIFTLQ/KSHIFTLD)
     Q/PUNPCKLQDQ (PUNPCKLBW/PUNPCKLWD/PUNPCKLDQ/PUNPCKLQDQ)
+    VFMADDSUB231PH (VFMADDSUB132PH/VFMADDSUB213PH/VFMADDSUB231PH)
      */
-    let regex2_filter = Regex::new("^(T1|TLD|Q/PUNPCKLQDQ)-").unwrap();
+    let regex2_filter = Regex::new("^(T1|TLD|Q/PUNPCKLQDQ|VFMADDSUB231PH)-").unwrap();
 
     let mut matched1 = false;
     let mut matched2 = false;
@@ -174,15 +178,19 @@ fn get_operation_summary(page: &[String]) -> (&[String], String, String) {
     }
 
     trace!("Footer내부 인스트럭션 및 설명 : {}", title_and_summary);
-    /* 아래 파트에서 오류가 날 경우, 예외처리할 패턴이 발생했다는 것 */
-    let (operation, summary) = title_and_summary.split_once("-").unwrap();
+    let (operation, summary) = title_and_summary
+        .split_once("-")
+        .expect("예외처리할 패턴이 발생했습니다.");
     (&page[1..to], operation.to_owned(), summary.to_owned())
 }
 
 fn skip_until_title_end(page: &[String]) -> &[String] {
     let mut result = page;
-    /* 아래 파트에서 오류가 날 경우, 이번 footer 혹은 지난 footer 파싱이 잘못된 것 */
-    while !result[0].starts_with("Opcode") {
+    while !result
+        .get(0)
+        .expect("이번 footer 혹은 지난 footer 파싱이 잘못되었습니다.")
+        .starts_with("Opcode")
+    {
         result = &result[1..];
     }
     result
