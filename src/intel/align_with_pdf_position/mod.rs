@@ -165,19 +165,19 @@ fn get_operation_summary(page: &[String]) -> (&[String], String, String) {
     // 제외정규식
     let regex2_filter = RegexSet::new([
         // T1 (INT n/INTO/INT3/INT1)
-        "T1-",
+        "^T1-",
         // TLD (KSHIFTLW/KSHIFTLB/KSHIFTLQ/KSHIFTLD)
-        "TLD-",
+        "^TLD-",
         // Q/PUNPCKLQDQ (PUNPCKLBW/PUNPCKLWD/PUNPCKLDQ/PUNPCKLQDQ)
-        "Q/PUNPCKLQDQ-",
+        "^Q/PUNPCKLQDQ-",
         // VFMADDSUB231PH (VFMADDSUB132PH/VFMADDSUB213PH/VFMADDSUB231PH)
-        "VFMADDSUB231PH-",
+        "^VFMADDSUB231PH-",
         // H/VFMSUBADD231PH (VFMSUBADD132PH/VFMSUBADD213PH/VFMSUBADD231PH)
-        "H/VFMSUBADD231PH-",
+        "^H/VFMSUBADD231PH-",
         // VFNMADD231PD (VFNMADD132PD/VFNMADD213PD/VFNMADD231PD)
-        "VFNMADD231PD-",
+        "^VFNMADD231PD-",
         // VFNMADD231SD (VFNMADD132SD/VFNMADD213SD/VFNMADD231SD)
-        "VFNMADD231SD-",
+        "^VFNMADD231SD-",
     ])
     .unwrap();
 
