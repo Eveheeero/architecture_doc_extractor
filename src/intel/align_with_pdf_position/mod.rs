@@ -124,7 +124,7 @@ fn get_operation_summary(page: &[String]) -> (&[String], String, String) {
     //  Vol. 2A3-55 혹은 3-48Vol. 2A같은 형식의 문자열을 인식
     let regex1 = Regex::new(r"^(Vol\. \d[A-Z]\d-\d+|\d-\d+Vol\. \d[A-Z])$").unwrap();
     // AESDEC128KL-.... 같은 형색의 문자열을 인식
-    let regex2 = RegexSet::new([
+    let matching_text_is_instruction_or_instructions_start = RegexSet::new([
         "^[A-Z]([A-Z0-9()/]|cc|, ?|x\\d{1,2})+-",
         // INT n/INTO/INT3/INT1-
         "^INT n/INTO/INT3/INT1-",
@@ -160,10 +160,16 @@ fn get_operation_summary(page: &[String]) -> (&[String], String, String) {
         "^VFNMADD132PD/VFNMADD213PD/$",
         // VFNMADD132SD/VFNMADD213SD/
         "^VFNMADD132SD/VFNMADD213SD/$",
+        // VFNMSUB132SD/VFNMSUB213SD/VFNMSU
+        "^VFNMSUB132SD/VFNMSUB213SD/VFNMSU$",
+        // VFNMSUB132SS/VFNMSUB213SS/VFNMSU
+        "^VFNMSUB132SS/VFNMSUB213SS/VFNMSU$",
+        // VINSERTF128/VINSERTF32x4/VINSERTF64x
+        "^VINSERTF128/VINSERTF32x4/VINSERTF64x$",
     ])
     .unwrap();
     // 제외정규식
-    let regex2_filter = RegexSet::new([
+    let matching_text_is_not_instructions_start = RegexSet::new([
         // T1 (INT n/INTO/INT3/INT1)
         "^T1-",
         // TLD (KSHIFTLW/KSHIFTLB/KSHIFTLQ/KSHIFTLD)
@@ -178,6 +184,10 @@ fn get_operation_summary(page: &[String]) -> (&[String], String, String) {
         "^VFNMADD231PD-",
         // VFNMADD231SD (VFNMADD132SD/VFNMADD213SD/VFNMADD231SD)
         "^VFNMADD231SD-",
+        // B231SD- (VFNMSUB132SD/VFNMSUB213SD/VFNMSUB231SD)
+        "^B231SD-",
+        // B231SS- (VFNMSUB132SS/VFNMSUB213SS/VFNMSUB231SS-)
+        "^B231SS-",
     ])
     .unwrap();
 
@@ -195,7 +205,9 @@ fn get_operation_summary(page: &[String]) -> (&[String], String, String) {
         if regex1.is_match(&line) {
             temp.clear();
             matched1 = true;
-        } else if regex2.is_match(&line) && !regex2_filter.is_match(&line) {
+        } else if matching_text_is_instruction_or_instructions_start.is_match(&line)
+            && !matching_text_is_not_instructions_start.is_match(&line)
+        {
             title_and_summary = line.clone() + &temp;
             temp.clear();
             matched2 = true;
@@ -212,11 +224,12 @@ fn get_operation_summary(page: &[String]) -> (&[String], String, String) {
     (&page[1..to], operation.to_owned(), summary.to_owned())
 }
 
+/// 페이지 중 Opcode라는 메세지가 나올때까지 스킵한다. (새로운 인스트럭션의 설명이 왔을땐 Opcode라는 단어가 존재하기 때문)
 fn skip_until_title_end(page: &[String]) -> &[String] {
     let mut result = page;
     while !result
         .get(0)
-        .expect("이번 footer 혹은 지난 footer 파싱이 잘못되었습니다.")
+        .expect("이번 footer 혹은 지난 footer 파싱이 잘못되었습니다. 현재 감지된 인스트럭션 및 설명이 알맞은 인스트럭션이 아닐 경우 이번 footer 파싱을 확인해주세요.")
         .starts_with("Opcode")
     {
         result = &result[1..];
