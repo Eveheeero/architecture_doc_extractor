@@ -43,6 +43,7 @@ fn blocks_into_string(blocks: Vec<Instruction>) {
 }
 
 fn block_into_string(block: Instruction) {
+    tracing::debug!("{} 페이지 파싱중", block.title);
     let instruction = block.title.to_owned();
     let description: Vec<String> = block.into_string();
     static INIT_DIRECTORY: Once = Once::new();
