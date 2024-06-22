@@ -166,6 +166,14 @@ fn get_operation_summary(page: &[String]) -> (&[String], String, String) {
         "^VFNMSUB132SS/VFNMSUB213SS/VFNMSU$",
         // VINSERTF128/VINSERTF32x4/VINSERTF64x
         "^VINSERTF128/VINSERTF32x4/VINSERTF64x$",
+        // VINSERTI128/VINSERTI32x4/VINSERTI
+        "^VINSERTI128/VINSERTI32x4/VINSERTI$",
+        // VINSERTI128/VINSERTI32x4/
+        "^VINSERTI128/VINSERTI32x4/$",
+        // VPRORD/VPRORVD/VPRORQ/VP
+        "^VPRORD/VPRORVD/VPRORQ/VP$",
+        // VSHUFF32x4/VSHUFF64x2/VSHUFI32x
+        "^VSHUFF32x4/VSHUFF64x2/VSHUFI32x$",
     ])
     .unwrap();
     // 제외정규식
@@ -188,6 +196,8 @@ fn get_operation_summary(page: &[String]) -> (&[String], String, String) {
         "^B231SD-",
         // B231SS- (VFNMSUB132SS/VFNMSUB213SS/VFNMSUB231SS-)
         "^B231SS-",
+        // RORVQ- (VPRORD/VPRORVD/VPRORQ/VPRORVQ)
+        "^RORVQ-",
     ])
     .unwrap();
 
