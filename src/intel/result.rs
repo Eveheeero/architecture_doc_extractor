@@ -23,10 +23,71 @@ pub(super) struct Instruction {
 impl Instruction {
     /// Parse instruction name
     pub(super) fn get_instructions_name(&self) -> Vec<String> {
-        if self.title.contains("/") {
-            self.title.split("/").map(|x| x.trim().to_owned()).collect()
+        let data = self.title.clone();
+        if data.contains('[') {
+            let datas = Self::match_if_possible(data);
+            let mut result = Vec::new();
+            for data in datas {
+                result.append(&mut Self::split_instruction_name_if_possible(data));
+            }
+            result
         } else {
-            [self.title.clone()].into()
+            Self::split_instruction_name_if_possible(data)
+        }
+    }
+    fn match_if_possible(data: impl AsRef<str>) -> Vec<String> {
+        let data = data.as_ref();
+        let mut items = data.split('[');
+        let before = items.next().unwrap().to_owned();
+        let data = items.next().unwrap();
+        let mut items = data.split(']');
+        let middle = items.next().unwrap().to_owned();
+        let selectable = middle
+            .split(',')
+            .map(|x| x.trim().to_owned())
+            .collect::<Vec<String>>();
+        let after = items.next().unwrap().to_owned();
+
+        let mut datas = Vec::new();
+        for select in selectable {
+            let mut data = before.clone();
+            data.push_str(&select);
+            data.push_str(&after);
+            datas.push(data);
+        }
+
+        let mut result = Vec::new();
+        for data in datas.into_iter() {
+            if data.contains('[') {
+                result.append(&mut Self::match_if_possible(data));
+            } else {
+                result.push(data.to_owned());
+            }
+        }
+        result
+    }
+    fn split_instruction_name_if_possible(data: impl AsRef<str>) -> Vec<String> {
+        let data = data.as_ref();
+        if data.contains("/") {
+            let items: Vec<String> = data.split("/").map(|x| x.trim().to_owned()).collect();
+            let mut result: Vec<String> = Vec::new();
+            let etc_len_is_2 = items.len() >= 2 && items.iter().all(|x| x.len() == 2);
+            for item in items.into_iter() {
+                if item.len() <= 2 {
+                    let mut first = result[0].clone();
+                    first.pop();
+                    if etc_len_is_2 {
+                        first.pop();
+                    }
+                    first.push_str(&item);
+                    result.push(first);
+                } else {
+                    result.push(item);
+                }
+            }
+            result
+        } else {
+            [data.to_owned()].into()
         }
     }
     /// Instruction to result string
