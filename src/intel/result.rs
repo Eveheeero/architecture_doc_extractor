@@ -23,7 +23,11 @@ pub(super) struct Instruction {
 impl Instruction {
     /// Parse instruction name
     pub(super) fn get_instructions_name(&self) -> Vec<String> {
-        [self.title.clone()].into()
+        if self.title.contains("/") {
+            self.title.split("/").map(|x| x.trim().to_owned()).collect()
+        } else {
+            [self.title.clone()].into()
+        }
     }
     /// Instruction to result string
     pub(super) fn into_md(self) -> Vec<String> {
@@ -56,6 +60,7 @@ impl Instruction {
         if !self.flag_affected.is_empty() {
             result.push("".to_owned());
             result.push("## Flags affected".to_owned());
+            result.push("".to_owned());
             result.push(format!(
                 "- {flag_affected}",
                 flag_affected = self.flag_affected
@@ -71,6 +76,16 @@ impl Instruction {
     }
 
     fn get_description(&self) -> Vec<String> {
-        todo!()
+        let mut result = Vec::new();
+        let long = self.description.join("");
+
+        for line in long.split(". ") {
+            result.push(line.to_owned() + ".");
+        }
+        result.last_mut().map(|x| {
+            x.pop();
+        });
+
+        result
     }
 }
