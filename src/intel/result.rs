@@ -21,8 +21,12 @@ pub(super) struct Instruction {
 }
 
 impl Instruction {
+    /// Parse instruction name
+    pub(super) fn get_instructions_name(&self) -> Vec<String> {
+        [self.title.clone()].into()
+    }
     /// Instruction to result string
-    pub(super) fn into_string(self) -> Vec<String> {
+    pub(super) fn into_md(self) -> Vec<String> {
         let mut result = Vec::new();
 
         // 제목

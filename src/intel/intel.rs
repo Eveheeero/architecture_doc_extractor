@@ -43,17 +43,17 @@ fn blocks_into_string(blocks: Vec<Instruction>) {
 }
 
 fn block_into_string(block: Instruction) {
-    tracing::debug!("{} 페이지 파싱중", block.title);
-    let instruction = block.title.to_owned();
-    let description: Vec<String> = block.into_string();
+    tracing::debug!("{} 페이지 생성중", block.title);
+    let instructions = block.get_instructions_name();
+    let md_contents: Vec<String> = block.into_md();
     static INIT_DIRECTORY: Once = Once::new();
     INIT_DIRECTORY.call_once(|| {
         std::fs::create_dir_all("result/intel").expect("베이스 디렉토리 생성 불가");
     });
-    for instruction in instruction.split('/') {
+    for instruction in instructions.into_iter() {
         std::fs::write(
             format!("result/intel/{instruction}.md"),
-            description.join("\n"),
+            md_contents.join("\n"),
         )
         .expect(format!("{} 파일 생성 실패", instruction).as_str());
     }
