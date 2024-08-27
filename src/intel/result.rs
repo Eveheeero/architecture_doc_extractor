@@ -72,6 +72,12 @@ impl Instruction {
         // 명령
 
         result.push("".to_owned());
+
+        // DEBUG PRINT
+        result.push("```rust".into());
+        result.push(format!("{:#?}", self));
+        result.push("```".into());
+        result.push("".to_owned());
         result
     }
 
