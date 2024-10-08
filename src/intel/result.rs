@@ -129,6 +129,24 @@ impl Instruction {
         }
 
         // 예외
+        if !self.exceptions.is_empty() {
+            result.push("".to_owned());
+            result.push("## Exceptions".to_owned());
+            result.push("".to_owned());
+            for (kind, exceptions) in &self.exceptions {
+                result.push(format!("- {kind}"));
+                for exception in exceptions {
+                    if exception.contains('\u{1}') {
+                        let mut iter = exception.split('\u{1}');
+                        let head = iter.next().unwrap().trim().to_owned();
+                        let tail = iter.next().unwrap().trim().to_owned();
+                        result.push(format!("  - {head} - {tail}"));
+                    } else {
+                        result.push(format!("  > {exception}"));
+                    }
+                }
+            }
+        }
         // C/C++ 코드
         // 명령
 
