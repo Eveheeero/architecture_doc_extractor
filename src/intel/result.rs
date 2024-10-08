@@ -102,8 +102,10 @@ impl Instruction {
         result.push(format!("{summary}", summary = self.summary));
 
         // 인스트럭션 별 설명
+        // TODO
 
         // 문서 하이퍼링크
+        // TODO
 
         // 설명
         let mut description = self.get_description();
@@ -114,8 +116,10 @@ impl Instruction {
         drop(description);
 
         // 호환성
+        // TODO
 
         // 옵코드
+        // TODO
 
         // Flags affected
         if !self.flag_affected.is_empty() {
@@ -147,8 +151,19 @@ impl Instruction {
                 }
             }
         }
+
         // C/C++ 코드
-        // 명령
+        if !self.operation.is_empty() {
+            result.push("".to_owned());
+            result.push("## Operation".to_owned());
+            result.push("".to_owned());
+            result.push(format!("```C",));
+            result.push(self.operation.clone());
+            result.push("```".to_owned());
+        }
+
+        // 대체 함수
+        // TODO
 
         result.push("".to_owned());
 
