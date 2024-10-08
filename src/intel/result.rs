@@ -157,8 +157,8 @@ impl Instruction {
             result.push("".to_owned());
             result.push("## Operation".to_owned());
             result.push("".to_owned());
-            result.push(format!("```C",));
-            result.push(self.operation.clone());
+            result.push("```C".to_owned());
+            result.append(&mut self.get_reformed_operation());
             result.push("```".to_owned());
         }
 
@@ -187,5 +187,9 @@ impl Instruction {
         });
 
         result
+    }
+    fn get_reformed_operation(&self) -> Vec<String> {
+        let data = self.operation.clone();
+        [data].into()
     }
 }
