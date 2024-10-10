@@ -13,7 +13,8 @@ pub fn main() {
         let data = extract_text(from, to);
         result.append(&mut align_with_pdf_position::parse_instructions(data));
     }
-    blocks_into_string(result);
+    let saved_instructions = save_instructions(result);
+    saved_list_to_rust_enum(saved_instructions);
 }
 
 fn extract_text(from: u32, to: u32) -> Vec<Vec<String>> {
@@ -38,11 +39,13 @@ fn extract_text(from: u32, to: u32) -> Vec<Vec<String>> {
     texts
 }
 
-fn blocks_into_string(blocks: Vec<Instruction>) {
-    blocks.into_iter().for_each(block_into_string)
+/// return is parsed instruction names
+fn save_instructions(blocks: Vec<Instruction>) -> Vec<String> {
+    blocks.into_iter().map(save_instruction).flatten().collect()
 }
 
-fn block_into_string(block: Instruction) {
+/// return is parsed instruction names
+fn save_instruction(block: Instruction) -> Vec<String> {
     tracing::debug!("{} 페이지 생성중", block.title);
     let instructions = block.get_instructions_name();
     let md_contents: Vec<String> = block.into_md();
@@ -50,11 +53,33 @@ fn block_into_string(block: Instruction) {
     INIT_DIRECTORY.call_once(|| {
         std::fs::create_dir_all("result/intel").expect("베이스 디렉토리 생성 불가");
     });
+    let mut saved_instructions = Vec::new();
     for instruction in instructions.into_iter() {
+        saved_instructions.push(instruction.clone());
         std::fs::write(
             format!("result/intel/{instruction}.md"),
             md_contents.join("\n"),
         )
         .expect(format!("{} 파일 생성 실패", instruction).as_str());
     }
+    saved_instructions
+}
+
+fn saved_list_to_rust_enum(mut saved_instructions: Vec<String>) {
+    saved_instructions.sort();
+    let mut result = Vec::new();
+    result.push("enum X64{".into());
+    for instruction in saved_instructions.into_iter() {
+        result.push(format!("#[doc = include_str!(\"{instruction}.md\")]"));
+        // 맨 앞글자만 빼고 소문자로 바꿈
+        let instruction = instruction
+            .chars()
+            .enumerate()
+            .map(|(i, c)| if i == 0 { c } else { c.to_ascii_lowercase() })
+            .collect::<String>();
+        result.push(format!("{instruction},"));
+    }
+    result.push("}".into());
+
+    std::fs::write("result/intel/mod.rs", result.join("\n")).expect("모듈 생성 실패");
 }
