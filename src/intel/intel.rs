@@ -5,7 +5,7 @@ mod result;
 
 use crate::pdf;
 use result::Instruction;
-use std::sync::Once;
+use std::{collections::HashMap, sync::Once};
 
 pub fn main() {
     let mut result = Vec::new();
@@ -40,12 +40,12 @@ fn extract_text(from: u32, to: u32) -> Vec<Vec<String>> {
 }
 
 /// return is parsed instruction names
-fn save_instructions(blocks: Vec<Instruction>) -> Vec<String> {
+fn save_instructions(blocks: Vec<Instruction>) -> HashMap<String, Vec<String>> {
     blocks.into_iter().map(save_instruction).flatten().collect()
 }
 
 /// return is parsed instruction names
-fn save_instruction(block: Instruction) -> Vec<String> {
+fn save_instruction(block: Instruction) -> HashMap<String, Vec<String>> {
     tracing::debug!("{} 페이지 생성중", block.title);
     let instructions = block.get_instructions_name();
     let md_contents: Vec<String> = block.into_md();
@@ -53,13 +53,13 @@ fn save_instruction(block: Instruction) -> Vec<String> {
     INIT_DIRECTORY.call_once(|| {
         std::fs::create_dir_all("result/intel").expect("베이스 디렉토리 생성 불가");
     });
-    let mut saved_instructions = Vec::new();
+    let mut saved_instructions = HashMap::new();
     for mut instruction in instructions.into_iter() {
         if instruction == "INT n" {
             instruction = "INT".into();
         }
 
-        saved_instructions.push(instruction.clone());
+        saved_instructions.insert(instruction.clone(), md_contents.clone());
         std::fs::write(
             format!("result/intel/{instruction}.md"),
             md_contents.join("\n"),
@@ -69,12 +69,13 @@ fn save_instruction(block: Instruction) -> Vec<String> {
     saved_instructions
 }
 
-fn saved_list_to_rust_enum(mut saved_instructions: Vec<String>) {
-    saved_instructions.dedup();
-    saved_instructions.sort();
+fn saved_list_to_rust_enum(mut saved_instructions: HashMap<String, Vec<String>>) {
+    let mut keys = saved_instructions.keys().cloned().collect::<Vec<_>>();
+    keys.sort();
+    keys.dedup();
     let mut result = Vec::new();
     result.push("enum X64{".into());
-    for instruction in saved_instructions.into_iter() {
+    for instruction in keys.into_iter() {
         result.push(format!(
             "#[doc = include_str!(\"../../doc/intel/{instruction}.md\")]"
         ));
@@ -88,5 +89,5 @@ fn saved_list_to_rust_enum(mut saved_instructions: Vec<String>) {
     }
     result.push("}".into());
 
-    std::fs::write("result/intel/mod.rs", result.join("\n")).expect("모듈 생성 실패");
+    std::fs::write("result/intel.rs", result.join("\n")).expect("모듈 생성 실패");
 }
