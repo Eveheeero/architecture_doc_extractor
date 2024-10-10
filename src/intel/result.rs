@@ -25,6 +25,7 @@ impl Instruction {
     pub(super) fn get_instructions_name(&self) -> Vec<String> {
         let data = self.title.clone();
         if data.contains('[') {
+            /* split with match([]) regex */
             let datas = Self::match_if_possible(data);
             let mut result = Vec::new();
             for data in datas {
@@ -32,6 +33,7 @@ impl Instruction {
             }
             result
         } else {
+            /* split with / and comma */
             Self::split_instruction_name_if_possible(data)
         }
     }
@@ -80,15 +82,28 @@ impl Instruction {
                         first.pop();
                     }
                     first.push_str(&item);
-                    result.push(first);
+                    result.append(&mut Self::split_comma(first));
                 } else {
-                    result.push(item);
+                    result.append(&mut Self::split_comma(item));
                 }
             }
             result
         } else {
             [data.to_owned()].into()
         }
+    }
+    fn split_comma(data: impl AsRef<str>) -> Vec<String> {
+        let data = data.as_ref();
+        if !data.contains(',') {
+            return [data.to_owned()].into();
+        }
+        let mut result = Vec::new();
+        let mut items = data.split(',');
+        let first = items.next().unwrap().to_owned();
+        let rest = items.collect::<Vec<&str>>().join(",");
+        result.push(first);
+        result.append(&mut Self::split_comma(rest));
+        result
     }
     /// Instruction to result string
     pub(super) fn into_md(self) -> Vec<String> {

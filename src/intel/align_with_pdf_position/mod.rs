@@ -231,7 +231,11 @@ fn get_operation_summary(page: &[String]) -> (&[String], String, String) {
     let (operation, summary) = title_and_summary
         .split_once("-")
         .expect("예외처리할 패턴이 발생했습니다.");
-    (&page[1..to], operation.to_owned(), summary.to_owned())
+    (
+        &page[1..to],
+        operation.trim().to_owned(),
+        summary.to_owned(),
+    )
 }
 
 /// 페이지 중 Opcode라는 메세지가 나올때까지 스킵한다. (새로운 인스트럭션의 설명이 왔을땐 Opcode라는 단어가 존재하기 때문)
