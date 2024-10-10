@@ -54,7 +54,11 @@ fn save_instruction(block: Instruction) -> Vec<String> {
         std::fs::create_dir_all("result/intel").expect("베이스 디렉토리 생성 불가");
     });
     let mut saved_instructions = Vec::new();
-    for instruction in instructions.into_iter() {
+    for mut instruction in instructions.into_iter() {
+        if instruction == "INT n" {
+            instruction = "INT".into();
+        }
+
         saved_instructions.push(instruction.clone());
         std::fs::write(
             format!("result/intel/{instruction}.md"),
