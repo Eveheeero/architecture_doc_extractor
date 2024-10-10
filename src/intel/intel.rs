@@ -70,11 +70,14 @@ fn save_instruction(block: Instruction) -> Vec<String> {
 }
 
 fn saved_list_to_rust_enum(mut saved_instructions: Vec<String>) {
+    saved_instructions.dedup();
     saved_instructions.sort();
     let mut result = Vec::new();
     result.push("enum X64{".into());
     for instruction in saved_instructions.into_iter() {
-        result.push(format!("#[doc = include_str!(\"{instruction}.md\")]"));
+        result.push(format!(
+            "#[doc = include_str!(\"../../doc/intel/{instruction}.md\")]"
+        ));
         // 맨 앞글자만 빼고 소문자로 바꿈
         let instruction = instruction
             .chars()

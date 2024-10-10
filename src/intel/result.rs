@@ -183,10 +183,10 @@ impl Instruction {
         result.push("".to_owned());
 
         // DEBUG PRINT
-        result.push("```rust".into());
-        result.push(format!("{:#?}", self));
-        result.push("```".into());
-        result.push("".to_owned());
+        // result.push("```rust".into());
+        // result.push(format!("{:#?}", self));
+        // result.push("```".into());
+        // result.push("".to_owned());
         result
     }
 
