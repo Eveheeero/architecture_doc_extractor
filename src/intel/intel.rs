@@ -74,18 +74,23 @@ fn saved_list_to_rust_enum(mut saved_instructions: HashMap<String, Vec<String>>)
     keys.sort();
     keys.dedup();
     let mut result = Vec::new();
-    result.push("enum X64{".into());
+    result.push("enum X64 {".into());
     for instruction in keys.into_iter() {
-        result.push(format!(
-            "#[doc = include_str!(\"../../doc/intel/{instruction}.md\")]"
-        ));
+        let docs = saved_instructions.remove(&instruction).unwrap();
+        for line in docs.iter() {
+            if line.is_empty() {
+                result.push("    ///".into());
+            } else {
+                result.push(format!("    /// {}", line));
+            }
+        }
         // 맨 앞글자만 빼고 소문자로 바꿈
         let instruction = instruction
             .chars()
             .enumerate()
             .map(|(i, c)| if i == 0 { c } else { c.to_ascii_lowercase() })
             .collect::<String>();
-        result.push(format!("{instruction},"));
+        result.push(format!("    {instruction},"));
     }
     result.push("}".into());
 
