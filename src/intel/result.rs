@@ -24,6 +24,32 @@ impl Instruction {
     /// Parse instruction name
     pub(super) fn get_instructions_name(&self) -> Vec<String> {
         let data = self.title.clone();
+
+        if data == "Jcc" {
+            return [
+                "Ja".into(),
+                "Jae".into(),
+                "Jb".into(),
+                "Jbe".into(),
+                "Jcxz".into(),
+                "Jecxz".into(),
+                "Jrcxz".into(),
+                "Jz".into(),
+                "Jg".into(),
+                "Jge".into(),
+                "Jl".into(),
+                "Jle".into(),
+                "Jnz".into(),
+                "Jno".into(),
+                "Jnp".into(),
+                "Jns".into(),
+                "Jo".into(),
+                "Jp".into(),
+                "Js".into(),
+            ]
+            .into();
+        }
+
         if data.contains('[') {
             /* split with match([]) regex */
             let datas = Self::match_if_possible(data);
