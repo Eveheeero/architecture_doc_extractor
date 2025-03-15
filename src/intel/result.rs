@@ -7,7 +7,7 @@ pub(super) struct Instruction {
     /// 인스트럭션 요약
     pub(super) summary: String,
     /// 상세 인스트럭션 별 설명
-    pub(super) instruction: (String, String),
+    pub(super) _instruction: (String, String),
     /// 상세설명
     pub(super) description: Vec<String>,
     /// c 가상코드

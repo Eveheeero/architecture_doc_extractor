@@ -88,7 +88,7 @@ fn clear_stacked_status(context: &mut ParsingContext) {
             context.instruction.summary = summary;
         }
         Category::OpcodeDescription => {
-            let content = context.clear_stacked_data().join("");
+            let _content = context.clear_stacked_data().join("");
             // instruction에 저장
             // TODO
         }
