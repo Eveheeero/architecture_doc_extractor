@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use lopdf::{content::Operation, Document, Object};
 use rayon::prelude::*;
 use std::sync::Mutex;
@@ -39,23 +37,17 @@ fn extract_num(obj: &Object) -> f32 {
     }
 }
 
+const PDF_TEXT_HEIGHT_FACTOR: f32 = 1.35; /* line factor, if error, change to 1.4 */
+
 /// pdf 페이지 내부 정렬 순서에 따라 텍스트 파싱
 pub(crate) fn operator_to_texts(
     doc: &Document,
     data: impl IntoIterator<Item = Operation>,
 ) -> Vec<String> {
-    #[derive(Debug)]
-    struct Text {
-        text: String,
-        /// (x, -y)
-        start_position: (f32, f32),
-        text_width: f32,
-        text_height: f32,
-    }
     let mut last_position = (0.0, 0.0);
     let mut text_height = 0.0;
     let mut text_width = 0.0;
-    let mut result: Vec<Text> = data
+    let mut result: Vec<PdfInnerText> = data
         .into_iter()
         .filter(|op| {
             matches!(
@@ -65,7 +57,7 @@ pub(crate) fn operator_to_texts(
         })
         .filter_map(|op| {
             if op.operator == "T*" {
-                last_position.1 -= text_height * 1.35 /* line factor, if error, change to 1.4 */;
+                last_position.1 -= text_height * PDF_TEXT_HEIGHT_FACTOR;
                 return None;
             } else if matches!(op.operator.as_str(), "Td" | "TD") {
                 last_position.0 += extract_num(&op.operands[0]) * text_width;
@@ -117,7 +109,7 @@ pub(crate) fn operator_to_texts(
             if false {
                 println!("{} {:?}", op.operator, op.operands);
             }
-            Some(Text {
+            Some(PdfInnerText {
                 text: line,
                 start_position: text_position,
                 text_width,
@@ -125,18 +117,61 @@ pub(crate) fn operator_to_texts(
             })
         })
         .collect();
+    if false {
+        for i in &result {
+            println!(
+                "[{}:{}({})] {}",
+                i.start_position.0, i.start_position.1, i.text_height, i.text
+            );
+        }
+    }
     result.sort_by(|a, b| {
-        let y = a
-            .start_position
-            .1
-            .partial_cmp(&b.start_position.1)
-            .unwrap()
-            .reverse();
+        let y = {
+            if a.is_same_line(b) {
+                std::cmp::Ordering::Equal
+            } else if a.is_higher_than(b) {
+                std::cmp::Ordering::Less
+            } else {
+                std::cmp::Ordering::Greater
+            }
+        };
         if y == std::cmp::Ordering::Equal {
-            a.start_position.0.partial_cmp(&b.start_position.0).unwrap()
+            a.get_x_position().partial_cmp(&b.get_x_position()).unwrap()
         } else {
             y
         }
     });
-    result.into_iter().map(|x| x.text).collect()
+    result
+        .into_iter()
+        .map(|x| x.get_text().to_owned())
+        .collect()
+}
+
+#[derive(Debug)]
+#[allow(dead_code)]
+pub(crate) struct PdfInnerText {
+    text: String,
+    /// (x, height)
+    start_position: (f32, f32),
+    text_width: f32,
+    text_height: f32,
+}
+impl PdfInnerText {
+    pub(crate) fn get_text(&self) -> &str {
+        &self.text
+    }
+    pub(crate) fn is_higher_than(&self, other: &Self) -> bool {
+        self.start_position.1 > other.start_position.1 && !self.is_same_line(other)
+    }
+    pub(crate) fn is_same_line(&self, other: &Self) -> bool {
+        let (higher, lower) = if self.start_position.1 > other.start_position.1 {
+            (self, other)
+        } else {
+            (other, self)
+        };
+        higher.start_position.1 - higher.text_height < lower.start_position.1
+    }
+    pub(crate) fn get_x_position(&self) -> f32 {
+        self.start_position.0
+    }
 }

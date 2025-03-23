@@ -1,5 +1,4 @@
 mod align;
-mod category;
 mod result;
 
 use crate::pdf;
