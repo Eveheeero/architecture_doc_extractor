@@ -31,46 +31,6 @@ pub(crate) fn extract_tj<'obj>(
     }
 }
 
-/// pdf 내부 operator순서에 따라 텍스트 파싱
-pub(crate) fn operator_to_texts_align_with_pdf_inner_operator(
-    doc: &Document,
-    data: impl IntoParallelIterator<Item = Operation>,
-) -> Vec<String> {
-    data.into_par_iter()
-        .filter(|op| op.operator.eq_ignore_ascii_case("tj"))
-        .map(|op| {
-            let line = op
-                .operands
-                .iter()
-                .map(|operand| {
-                    extract_tj(&doc, operand)
-                        .map(|c| match c {
-                            b'\n' => b' ',
-                            c => c,
-                        })
-                        .map(|x| x as u16)
-                        .collect::<Vec<u16>>()
-                })
-                .flatten()
-                .collect::<Vec<u16>>();
-            let line = String::from_utf16_lossy(&line);
-            // 특수문자 제거
-            let line = line
-                .replace("\u{92}", "'")
-                .replace("\\\u{93}", "\"")
-                .replace("\\\u{94}", "\"")
-                .replace("\\\u{95}", " - ")
-                .replace("\u{93}", "\"")
-                .replace("\u{94}", "\"")
-                .replace("\u{95}", " - ")
-                .replace("\u{96}", "-")
-                .replace("\u{97}", "-")
-                .replace("\u{8a}", "-");
-            line
-        })
-        .collect()
-}
-
 fn extract_num(obj: &Object) -> f32 {
     match obj {
         Object::Integer(o) => *o as f32,
@@ -80,7 +40,7 @@ fn extract_num(obj: &Object) -> f32 {
 }
 
 /// pdf 페이지 내부 정렬 순서에 따라 텍스트 파싱
-pub(crate) fn operator_to_texts_align_with_pdf_position(
+pub(crate) fn operator_to_texts(
     doc: &Document,
     data: impl IntoIterator<Item = Operation>,
 ) -> Vec<String> {

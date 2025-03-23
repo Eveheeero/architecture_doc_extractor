@@ -1,5 +1,4 @@
-mod align_with_pdf_inner_operator;
-mod align_with_pdf_position;
+mod align;
 mod category;
 mod result;
 
@@ -11,7 +10,7 @@ pub fn main() {
     let mut result = Vec::new();
     for (from, to) in [(129, 734), (742, 1476), (1481, 2196), (2198, 2266)] {
         let data = extract_text(from, to);
-        result.append(&mut align_with_pdf_position::parse_instructions(data));
+        result.append(&mut align::parse_instructions(data));
     }
     let saved_instructions = save_instructions(result);
     saved_list_to_rust_enum(saved_instructions);
@@ -22,7 +21,7 @@ fn extract_text(from: u32, to: u32) -> Vec<Vec<String>> {
     use rayon::prelude::*;
     let texts: Vec<Vec<String>> = (from..to)
         .into_par_iter()
-        .map(|index| pdf::page_to_texts_align_with_pdf_position(&doc, index))
+        .map(|index| pdf::page_to_texts(&doc, index))
         .collect();
     let file_name = format!("intel{from}_{to}.txt");
     if !std::fs::metadata(&file_name).is_ok() {

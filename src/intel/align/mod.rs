@@ -32,7 +32,6 @@ impl Section {
     }
 }
 
-#[allow(dead_code)]
 pub(super) fn parse_instructions(data: Vec<Vec<String>>) -> Vec<Instruction> {
     let mut result = Vec::new();
     let mut now = Instruction::default();

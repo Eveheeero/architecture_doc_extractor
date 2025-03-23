@@ -27,7 +27,7 @@ fn print_page_contents() {
 #[test]
 fn extract_page_texts() {
     let doc = lopdf::Document::load("src/intel/intel.pdf").unwrap();
-    let texts = crate::pdf::page_to_texts_align_with_pdf_position(&doc, 129);
+    let texts = crate::pdf::page_to_texts(&doc, 129);
     for text in texts {
         println!("{}", text);
     }
