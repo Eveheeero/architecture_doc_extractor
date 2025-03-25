@@ -104,8 +104,7 @@ pub(crate) fn operator_to_texts(
                 .replace("\u{97}", "-")
                 .replace("\u{8a}", "-");
 
-            let mut text_position = last_position;
-            text_position.1 += text_height;
+            let text_position = last_position;
             if false {
                 println!("{} {:?}", op.operator, op.operands);
             }
@@ -119,10 +118,7 @@ pub(crate) fn operator_to_texts(
         .collect();
     if false {
         for i in &result {
-            println!(
-                "[{}:{}({})] {}",
-                i.start_position.0, i.start_position.1, i.text_height, i.text
-            );
+            println!("{}", i.get_debug_string());
         }
     }
     result.sort_by(|a, b| {
@@ -135,11 +131,24 @@ pub(crate) fn operator_to_texts(
                 std::cmp::Ordering::Greater
             }
         };
-        if y == std::cmp::Ordering::Equal {
+        let result = if y == std::cmp::Ordering::Equal {
             a.get_x_position().partial_cmp(&b.get_x_position()).unwrap()
         } else {
             y
+        };
+        if false {
+            println!(
+                "[{}:{}({})] and [{}:{}({})] {:?}",
+                a.start_position.0,
+                a.start_position.1,
+                a.text_height,
+                b.start_position.0,
+                b.start_position.1,
+                b.text_height,
+                result
+            );
         }
+        result
     });
     result
         .into_iter()
@@ -147,11 +156,11 @@ pub(crate) fn operator_to_texts(
         .collect()
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[allow(dead_code)]
 pub(crate) struct PdfInnerText {
     text: String,
-    /// (x, height)
+    /// (x, height) left bottom corner
     start_position: (f32, f32),
     text_width: f32,
     text_height: f32,
@@ -164,14 +173,24 @@ impl PdfInnerText {
         self.start_position.1 > other.start_position.1 && !self.is_same_line(other)
     }
     pub(crate) fn is_same_line(&self, other: &Self) -> bool {
+        if self.start_position.1 == other.start_position.1 {
+            return true;
+        }
         let (higher, lower) = if self.start_position.1 > other.start_position.1 {
             (self, other)
         } else {
             (other, self)
         };
-        higher.start_position.1 - higher.text_height < lower.start_position.1
+        /* multiple 2/3 to prevent total ordering error by exponent of a log function */
+        higher.start_position.1 <= lower.start_position.1 + lower.text_height * 2.0 / 3.0
     }
     pub(crate) fn get_x_position(&self) -> f32 {
         self.start_position.0
+    }
+    pub(crate) fn get_debug_string(&self) -> String {
+        format!(
+            "[{}:{}({})] {}",
+            self.start_position.0, self.start_position.1, self.text_height, self.text
+        )
     }
 }
