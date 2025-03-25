@@ -1,6 +1,7 @@
 use lopdf::{content::Operation, Document, Object};
 use rayon::prelude::*;
 use std::sync::Mutex;
+use tracing::trace;
 
 /// pdf의 TJ operator에서 문자열을 추출한다.
 /// TJ ex -> ["abc", 3(공백사이즈), "def"] -> "abc    def"
@@ -111,10 +112,9 @@ pub(crate) fn operator_to_texts(
                 .replace("\u{8a}", "-");
 
             let text_position = last_position;
-            if false {
-                println!("{} {:?}", op.operator, op.operands);
-            }
+            trace!("{} {:?}", op.operator, op.operands);
             Some(PdfInnerText {
+                id: fastrand::usize(..),
                 text: line,
                 start_position: text_position,
                 text_width,
@@ -122,14 +122,14 @@ pub(crate) fn operator_to_texts(
             })
         })
         .collect();
-    if false {
-        for i in &result {
-            println!("{}", i.get_debug_string());
-        }
+    for i in &result {
+        trace!("{}", i.get_debug_string());
     }
+    result = extend_nearby_texts(result);
     result.sort_by(|a, b| {
         let y = {
             if a.is_same_line(b) && a.is_x_nearby(b) {
+                assert!(false);
                 std::cmp::Ordering::Equal
             } else if a.is_higher_than(b) {
                 std::cmp::Ordering::Less
@@ -138,26 +138,25 @@ pub(crate) fn operator_to_texts(
             }
         };
         let result = if y == std::cmp::Ordering::Equal {
+            assert!(false);
             a.get_x_position().partial_cmp(&b.get_x_position()).unwrap()
         } else {
             y
         };
-        if false {
-            println!(
-                "[{}({}):{}({})] [{}({}):{}({})] {:?} ({}) ({})",
-                a.start_position.0,
-                a.text_width,
-                a.start_position.1,
-                a.text_height,
-                b.start_position.0,
-                b.text_width,
-                b.start_position.1,
-                b.text_height,
-                result,
-                a.text,
-                b.text
-            );
-        }
+        trace!(
+            "[{}({}):{}({})] [{}({}):{}({})] {:?} ({}) ({})",
+            a.start_position.0,
+            a.text_width,
+            a.start_position.1,
+            a.text_height,
+            b.start_position.0,
+            b.text_width,
+            b.start_position.1,
+            b.text_height,
+            result,
+            a.text,
+            b.text
+        );
         result
     });
     result
@@ -166,9 +165,66 @@ pub(crate) fn operator_to_texts(
         .collect()
 }
 
+// 같은 라인에 있으며 주변에 있는 텍스트를 하나로 묶음
+fn extend_nearby_texts(mut d: Vec<PdfInnerText>) -> Vec<PdfInnerText> {
+    // TODO A텍스트 정 중앙에 B텍스트가 있는 경우는 상정되지 않음
+    // TODO \u{1}문자열때문에 텍스트 사이즈가 제대로 측정이 안 돼 일부 메세지 병합이 안되는 문제가 있음
+    let merge = |a: &PdfInnerText, b: &PdfInnerText| {
+        let (left, right) = if a.start_position.0 < b.start_position.0 {
+            (a, b)
+        } else {
+            (b, a)
+        };
+        let text = format!("{}{}", left.text, right.text);
+        let start_position = (left.start_position.0, left.start_position.1);
+        let text_width = left.text_width.max(right.text_width);
+        let text_height = left.text_height.max(right.text_height);
+        let result = PdfInnerText {
+            id: fastrand::usize(..),
+            text,
+            start_position,
+            text_width,
+            text_height,
+        };
+        trace!(?left, ?right, ?result);
+        result
+    };
+    let mut index = 0;
+    loop {
+        let mut remove_target_ids = Vec::new();
+        {
+            let now = &d[index];
+            trace!(?now, "다음 데이터에 대한 주변 문자열 병합 시작");
+        }
+        loop {
+            let now = &d[index];
+            let other_idx = d.iter().position(|o| {
+                now.id != o.id
+                    && now.is_same_line(o)
+                    && now.is_x_nearby(o)
+                    && !remove_target_ids.contains(&o.id)
+            });
+            let Some(other_idx) = other_idx else {
+                break;
+            };
+            let o = &d[other_idx];
+            remove_target_ids.push(o.id);
+            let merged = merge(now, o);
+            d[index] = merged;
+        }
+        d.retain(|x| !remove_target_ids.contains(&x.id));
+        index += 1;
+        if index >= d.len() {
+            break;
+        }
+    }
+    d
+}
+
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
 pub(crate) struct PdfInnerText {
+    id: usize,
     text: String,
     /// (x, height) left bottom corner
     start_position: (f32, f32),

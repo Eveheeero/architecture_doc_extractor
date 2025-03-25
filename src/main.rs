@@ -9,13 +9,19 @@ use simplelog::{CombinedLogger, Config, LevelFilter, SimpleLogger, WriteLogger};
 use std::fs::File;
 
 fn main() {
-    let log_level = LevelFilter::Debug;
-    let log_config = Config::default();
-    CombinedLogger::init(vec![
-        SimpleLogger::new(log_level, log_config.clone()),
-        // WriteLogger::new(log_level, log_config, File::create("last.log").unwrap()),
-    ])
-    .unwrap();
-
+    setup_logger();
     intel::main();
+}
+
+fn setup_logger() {
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(|| {
+        let log_level = LevelFilter::Debug;
+        let log_config = Config::default();
+        CombinedLogger::init(vec![
+            SimpleLogger::new(log_level, log_config.clone()),
+            // WriteLogger::new(log_level, log_config, File::create("last.log").unwrap()),
+        ])
+        .unwrap();
+    });
 }

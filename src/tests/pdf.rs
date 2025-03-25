@@ -1,5 +1,6 @@
 #[test]
 fn extract_page() {
+    crate::setup_logger();
     let doc = lopdf::Document::load("src/intel/intel.pdf").unwrap();
     let contents1 = crate::pdf::get_page_contents(&doc, 129);
     let contents2 = crate::pdf::get_page_contents2(&doc, 129);
@@ -11,6 +12,7 @@ fn extract_page() {
 
 #[test]
 fn print_page_contents() {
+    crate::setup_logger();
     let doc = lopdf::Document::load("src/intel/intel.pdf").unwrap();
     let contents = crate::pdf::get_page_contents(&doc, 129);
     for operation in contents.operations {
@@ -26,6 +28,7 @@ fn print_page_contents() {
 
 #[test]
 fn extract_page_texts() {
+    crate::setup_logger();
     let doc = lopdf::Document::load("src/intel/intel.pdf").unwrap();
     let texts = crate::pdf::page_to_texts(&doc, 129);
     for text in texts {
