@@ -144,14 +144,18 @@ pub(crate) fn operator_to_texts(
         };
         if false {
             println!(
-                "[{}:{}({})] and [{}:{}({})] {:?}",
+                "[{}({}):{}({})] [{}({}):{}({})] {:?} ({}) ({})",
                 a.start_position.0,
+                a.text_width,
                 a.start_position.1,
                 a.text_height,
                 b.start_position.0,
+                b.text_width,
                 b.start_position.1,
                 b.text_height,
-                result
+                result,
+                a.text,
+                b.text
             );
         }
         result
