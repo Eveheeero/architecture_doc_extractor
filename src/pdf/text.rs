@@ -37,7 +37,13 @@ fn extract_num(obj: &Object) -> f32 {
     }
 }
 
-const PDF_TEXT_HEIGHT_FACTOR: f32 = 1.35; /* line factor, if error, change to 1.4 */
+/// line factor, if error, change to 1.4
+const PDF_TEXT_HEIGHT_FACTOR: f32 = 1.35;
+/// width factor
+/// text's width is (length * width * width factor)
+/// text(x:72, length:18, width:9) ends at x: 142
+/// text(x:80, length:12, width:9) ends at x: 134
+const PDF_TEXT_WIDTH_FACTOR: f32 = 0.43;
 
 /// pdf 페이지 내부 정렬 순서에 따라 텍스트 파싱
 pub(crate) fn operator_to_texts(
@@ -123,7 +129,7 @@ pub(crate) fn operator_to_texts(
     }
     result.sort_by(|a, b| {
         let y = {
-            if a.is_same_line(b) {
+            if a.is_same_line(b) && a.is_x_nearby(b) {
                 std::cmp::Ordering::Equal
             } else if a.is_higher_than(b) {
                 std::cmp::Ordering::Less
@@ -170,13 +176,13 @@ impl PdfInnerText {
         &self.text
     }
     pub(crate) fn is_higher_than(&self, other: &Self) -> bool {
-        self.start_position.1 > other.start_position.1 && !self.is_same_line(other)
+        self.start_position.1 > other.start_position.1
     }
     pub(crate) fn is_same_line(&self, other: &Self) -> bool {
         if self.start_position.1 == other.start_position.1 {
             return true;
         }
-        let (higher, lower) = if self.start_position.1 > other.start_position.1 {
+        let (higher, lower) = if self.is_higher_than(other) {
             (self, other)
         } else {
             (other, self)
@@ -187,10 +193,25 @@ impl PdfInnerText {
     pub(crate) fn get_x_position(&self) -> f32 {
         self.start_position.0
     }
+    pub(crate) fn is_x_nearby(&self, other: &Self) -> bool {
+        const X_NEARBY_THRESHOLD: f32 = 10.0;
+        let (left, right) = if self.start_position.0 <= other.start_position.0 {
+            (self, other)
+        } else {
+            (other, self)
+        };
+        let left_object_right_side = left.start_position.0
+            + left.text.len() as f32 * left.text_width * PDF_TEXT_WIDTH_FACTOR;
+        right.start_position.0 <= left_object_right_side + X_NEARBY_THRESHOLD
+    }
     pub(crate) fn get_debug_string(&self) -> String {
         format!(
-            "[{}:{}({})] {}",
-            self.start_position.0, self.start_position.1, self.text_height, self.text
+            "[{}({}):{}({})] {}",
+            self.start_position.0,
+            self.text_width,
+            self.start_position.1,
+            self.text_height,
+            self.text
         )
     }
 }
