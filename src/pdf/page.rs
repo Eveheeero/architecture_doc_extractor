@@ -2,8 +2,10 @@
 
 use lopdf::{content::Content, Document};
 use rayon::prelude::*;
+use tracing::debug;
 
 pub(crate) fn page_to_texts(doc: &Document, page: u32) -> Vec<String> {
+    debug!("{}페이지 텍스트 추출중", page);
     super::operator_to_texts(doc, get_page_contents(doc, page).operations)
 }
 
