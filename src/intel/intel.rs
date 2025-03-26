@@ -28,9 +28,9 @@ fn extract_text(from: u32, to: u32) -> Vec<Vec<String>> {
             file_name,
             texts
                 .iter()
-                .flat_map(|x| x.to_owned())
+                .map(|x| x.join("\n"))
                 .collect::<Vec<_>>()
-                .join("\n"),
+                .join("\n--------------------------------------------------\n"),
         )
         .unwrap();
     }

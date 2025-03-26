@@ -11,7 +11,8 @@ pub(super) fn parse_now_section(_instruction: &Instruction, line: impl AsRef<str
             || line.starts_with("Opcode /")
             || line.starts_with("Opcode*\x01")
             || line.starts_with("Opcode*/")
-            || line == "Opcode" =>
+            || line == "Opcode"
+            || line == "Opcode1" =>
         {
             Section::InstructionsStart
         }
