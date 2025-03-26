@@ -9,6 +9,7 @@ pub(super) fn main() {
 }
 
 struct PdfInspector {
+    box_list: Vec<(egui::Rect, egui::Color32)>,
     text_list: Vec<InspectorText>,
 }
 struct InspectorText {
@@ -20,6 +21,7 @@ struct InspectorText {
 impl PdfInspector {
     fn new(_cc: &eframe::CreationContext<'_>) -> Self {
         let mut result = Self {
+            box_list: Vec::new(),
             text_list: Vec::new(),
         };
         result.generate_test_object();
@@ -76,6 +78,10 @@ impl eframe::App for PdfInspector {
                 let rich_text =
                     RichText::new(&text.text).font(FontId::proportional(text.text_size));
                 ui.put(text.rect, egui::Label::new(rich_text));
+            }
+
+            for r#box in &self.box_list {
+                ui.painter().rect_filled(r#box.0, 0, r#box.1);
             }
         });
     }
