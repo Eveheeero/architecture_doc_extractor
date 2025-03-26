@@ -1,4 +1,5 @@
 use eframe::egui::{self, FontId, RichText};
+use lopdf::Object;
 use std::collections::BTreeMap;
 
 pub(super) fn main() {
@@ -188,14 +189,14 @@ impl PdfInspector {
 }
 impl InspectorText {
     fn new(
-        text: String,
+        text: impl Into<String>,
         text_size: f32,
         left_top: impl Into<egui::Pos2>,
         right_bottom: impl Into<egui::Pos2>,
     ) -> Self {
         let rect_color = rand_color();
         Self {
-            text,
+            text: text.into(),
             text_size,
             rect: egui::Rect {
                 min: left_top.into(),
@@ -259,8 +260,65 @@ impl eframe::App for PdfInspector {
 fn extract_page(
     page: lopdf::content::Content,
 ) -> (Vec<InspectorText>, Vec<(egui::Rect, egui::Color32)>) {
-    let mut box_list = Vec::new();
+    let box_list = Vec::new();
     let mut text_list = Vec::new();
+
     let operations: Vec<lopdf::content::Operation> = page.operations;
+    let mut pointer = (0.0, 0.0);
+    let mut text_width = 0.0;
+    let mut text_height = 0.0;
+    for operation in operations {
+        let operator = operation.operator;
+        let operands = operation.operands;
+        match operator.as_ref() {
+            "Tm" | "Tlm" => {
+                if num(&operands[0]) == num(&operands[3])
+                    && num(&operands[1]) == 0.0
+                    && num(&operands[2]) == 0.0
+                {
+                    pointer = (num(&operands[4]), num(&operands[5]));
+                }
+                text_height = num(&operands[3]);
+                text_width = num(&operands[0]);
+            }
+            "Td" | "TD" => {
+                pointer.0 += num(&operands[0]) * text_width;
+                pointer.1 += num(&operands[1]) * text_height;
+            }
+            "T*" => {
+                pointer.1 -= text_height * 1.35;
+            }
+            "Tj" | "TJ" => {
+                for operand in operands {
+                    match operand {
+                        Object::String(string, _) => {
+                            if text_height != text_width {
+                                panic!();
+                            }
+                            let text = String::from_utf8_lossy(&string);
+                            let text_len = text.chars().count() as f32;
+                            text_list.push(InspectorText::new(
+                                text,
+                                text_height,
+                                [pointer.0, pointer.1 + text_height],
+                                [pointer.0 + text_width * text_len, pointer.1],
+                            ));
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
     (text_list, box_list)
+}
+
+fn num(obj: &Object) -> f32 {
+    match obj {
+        Object::Integer(o) => *o as f32,
+        Object::Real(o) => *o,
+        _ => unimplemented!(),
+    }
 }
