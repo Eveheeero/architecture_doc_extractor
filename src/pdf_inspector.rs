@@ -29,9 +29,16 @@ impl PdfInspector {
         let mut result = Self {
             box_list: Vec::new(),
             text_list: Vec::new(),
-            pdf_path: std::env::current_dir().unwrap().to_str().unwrap().into(),
+            pdf_path: std::env::current_dir()
+                .unwrap()
+                .join("src")
+                .join("intel")
+                .join("intel.pdf")
+                .to_str()
+                .unwrap()
+                .into(),
             pdf_doc: None,
-            pdf_page: "0".into(),
+            pdf_page: "1".into(),
             top_panel_height: 0.0,
         };
         result.generate_test_object();
@@ -69,9 +76,15 @@ impl PdfInspector {
             self.pdf_page = "Page not correct".into();
             return;
         };
-        self.clean();
         let doc = self.pdf_doc.as_ref().unwrap();
+        if page <= 0 || doc.get_pages().len() < page as usize {
+            self.pdf_page = "Page not found".into();
+            return;
+        }
         let contents = crate::pdf::get_page_contents(&doc, page);
+        let extracted = extract_page(contents);
+        self.text_list = extracted.0;
+        self.box_list = extracted.1;
     }
 }
 impl InspectorText {
@@ -122,8 +135,13 @@ impl eframe::App for PdfInspector {
                 }
                 if let Some(mut mouse_position) = mouse_position {
                     if mouse_position.y >= self.top_panel_height {
+                        let window_y = ctx.screen_rect().height();
+                        let mouse_height = window_y - mouse_position.y;
                         mouse_position.y -= self.top_panel_height;
-                        ui.label(format!("mouse position {:?}", mouse_position));
+                        ui.label(format!(
+                            "mouse position {:?}(-{})",
+                            mouse_position, mouse_height
+                        ));
                     }
                 }
             });
@@ -149,4 +167,13 @@ impl eframe::App for PdfInspector {
             }
         });
     }
+}
+
+fn extract_page(
+    page: lopdf::content::Content,
+) -> (Vec<InspectorText>, Vec<(egui::Rect, egui::Color32)>) {
+    let mut box_list = Vec::new();
+    let mut text_list = Vec::new();
+
+    (text_list, box_list)
 }
