@@ -151,7 +151,7 @@ impl PdfInspector {
         self.page = PdfInspectorPage::Inspector;
     }
     fn paint_page(&mut self, ctx: &egui::Context) {
-        egui::Window::new("paint_window")
+        let window_panel = egui::Window::new("paint_window")
             .scroll([false, true])
             .default_open(false)
             .show(ctx, |ui| {
@@ -197,6 +197,25 @@ impl PdfInspector {
                 ui.painter().rect_filled(rect, 0, r#box.1);
             }
         });
+
+        let clicked_pos = ctx.input(|input| {
+            if input.pointer.primary_clicked() {
+                input.pointer.interact_pos()
+            } else {
+                None
+            }
+        });
+        if !window_panel.unwrap().response.hovered()
+            && clicked_pos.map(|pos| self.top_panel_height < pos.y) == Some(true)
+        {
+            let mut pos = clicked_pos.unwrap();
+            pos.y = window_y - pos.y;
+            for text in &mut self.paint_page.text_list {
+                if text.widget_real_rect.contains(pos) {
+                    text.selected = !text.selected;
+                }
+            }
+        }
     }
     fn inspect_page(&mut self, ctx: &egui::Context) {
         egui::SidePanel::left("inspect_side_panel")
@@ -220,6 +239,19 @@ impl PdfInspector {
                 }
             })
         });
+
+        let all = ctx.input(|input| input.key_pressed(egui::Key::A));
+        if all {
+            if self.inspector_page.operators.values().any(|x| !x.1) {
+                for (_, v) in self.inspector_page.operators.iter_mut() {
+                    v.1 = true;
+                }
+            } else {
+                for (_, v) in self.inspector_page.operators.iter_mut() {
+                    v.1 = false;
+                }
+            }
+        }
     }
 }
 impl InspectorText {
@@ -239,7 +271,7 @@ impl InspectorText {
             },
             rect_color,
             widget_real_rect: egui::Rect::ZERO,
-            selected: true,
+            selected: false,
         }
     }
 }
