@@ -144,22 +144,25 @@ impl PdfInspector {
         self.page = PdfInspectorPage::Inspector;
     }
     fn paint_page(&mut self, ctx: &egui::Context) {
+        let window_y = ctx.screen_rect().height();
         egui::CentralPanel::default().show(ctx, |ui| {
             for text in &self.paint_page.text_list {
                 let mut rect = text.rect;
                 rect.min.y += self.top_panel_height;
                 rect.max.y += self.top_panel_height;
-                ui.painter().rect_filled(text.rect, 0, text.rect_color);
+                (rect.min.y, rect.max.y) = (window_y - rect.max.y, window_y - rect.min.y);
+                ui.painter().rect_filled(rect, 0, text.rect_color);
                 let rich_text =
                     RichText::new(&text.text).font(FontId::proportional(text.text_size));
-                ui.put(text.rect, egui::Label::new(rich_text));
+                ui.put(rect, egui::Label::new(rich_text));
             }
 
             for r#box in &self.paint_page.box_list {
                 let mut rect = r#box.0;
                 rect.min.y += self.top_panel_height;
                 rect.max.y += self.top_panel_height;
-                ui.painter().rect_filled(r#box.0, 0, r#box.1);
+                (rect.min.y, rect.max.y) = (window_y - rect.max.y, window_y - rect.min.y);
+                ui.painter().rect_filled(rect, 0, r#box.1);
             }
         });
     }
@@ -300,8 +303,8 @@ fn extract_page(
                             text_list.push(InspectorText::new(
                                 text,
                                 text_height,
-                                [pointer.0, pointer.1 + text_height],
-                                [pointer.0 + text_width * text_len, pointer.1],
+                                [pointer.0, pointer.1 - text_height],
+                                [pointer.0 + text_width * text_len * 0.43, pointer.1],
                             ));
                         }
                         _ => {}
@@ -312,6 +315,9 @@ fn extract_page(
         }
     }
 
+    for text in &text_list {
+        println!("{:?} {}", text.rect, text.text);
+    }
     (text_list, box_list)
 }
 
