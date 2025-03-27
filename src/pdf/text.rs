@@ -39,12 +39,12 @@ fn extract_num(obj: &Object) -> f32 {
 }
 
 /// line factor, if error, change to 1.4
-const PDF_TEXT_HEIGHT_FACTOR: f32 = 1.35;
+pub(crate) const PDF_TEXT_HEIGHT_FACTOR: f32 = 1.35;
 /// width factor
 /// text's width is (length * width * width factor)
 /// text(x:72, length:18, width:9) ends at x: 142
 /// text(x:80, length:12, width:9) ends at x: 134
-const PDF_TEXT_WIDTH_FACTOR: f32 = 0.43;
+pub(crate) const PDF_TEXT_WIDTH_FACTOR: f32 = 0.43;
 
 /// pdf 페이지 내부 정렬 순서에 따라 텍스트 파싱
 pub(crate) fn operator_to_texts(

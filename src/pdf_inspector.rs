@@ -1,3 +1,4 @@
+use crate::pdf::{PDF_TEXT_HEIGHT_FACTOR, PDF_TEXT_WIDTH_FACTOR};
 use eframe::egui::{self, FontId, RichText};
 use lopdf::Object;
 use std::collections::BTreeMap;
@@ -289,7 +290,7 @@ fn extract_page(
                 pointer.1 += num(&operands[1]) * text_height;
             }
             "T*" => {
-                pointer.1 -= text_height * 1.35;
+                pointer.1 -= text_height * PDF_TEXT_HEIGHT_FACTOR;
             }
             "Tj" | "TJ" => {
                 for operand in operands {
@@ -304,9 +305,41 @@ fn extract_page(
                                 text,
                                 text_height,
                                 [pointer.0, pointer.1 - text_height],
-                                [pointer.0 + text_width * text_len * 0.43, pointer.1],
+                                [
+                                    pointer.0 + text_width * text_len * PDF_TEXT_WIDTH_FACTOR,
+                                    pointer.1,
+                                ],
                             ));
                         }
+                        Object::Array(operands) => {
+                            let mut last_x = pointer.0;
+                            for operand in operands {
+                                match operand {
+                                    Object::Integer(i) => last_x -= i as f32 / 1000.0,
+                                    Object::Real(i) => last_x -= i / 1000.0,
+                                    Object::String(string, _) => {
+                                        if text_height != text_width {
+                                            panic!();
+                                        }
+                                        let text = String::from_utf8_lossy(&string);
+                                        let text_len = text.chars().count() as f32;
+                                        text_list.push(InspectorText::new(
+                                            text,
+                                            text_height,
+                                            [last_x, pointer.1 - text_height],
+                                            [
+                                                last_x
+                                                    + text_width * text_len * PDF_TEXT_WIDTH_FACTOR,
+                                                pointer.1,
+                                            ],
+                                        ));
+                                        last_x += text_width * text_len * PDF_TEXT_WIDTH_FACTOR;
+                                    }
+                                    _ => panic!("{:?}", operand),
+                                }
+                            }
+                        }
+                        Object::Real(_) | Object::Integer(_) => panic!(),
                         _ => {}
                     }
                 }
