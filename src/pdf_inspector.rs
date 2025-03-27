@@ -1,4 +1,4 @@
-use crate::pdf::{PDF_TEXT_HEIGHT_FACTOR, PDF_TEXT_WIDTH_FACTOR};
+use crate::pdf::PDF_TEXT_HEIGHT_FACTOR;
 use eframe::egui::{self, FontId, RichText};
 use lopdf::Object;
 use std::collections::BTreeMap;
@@ -24,6 +24,7 @@ struct PdfInspector {
 #[derive(Default)]
 struct PdfInspectorPaintPage {
     text_list: Vec<InspectorText>,
+    text_background: bool,
     box_list: Vec<(egui::Rect, egui::Color32)>,
 }
 #[derive(Default)]
@@ -37,6 +38,8 @@ struct InspectorText {
     text_size: f32,
     rect: egui::Rect,
     rect_color: egui::Color32,
+    selected: bool,
+    widget_real_rect: egui::Rect,
 }
 #[derive(PartialEq, Eq)]
 enum PdfInspectorPage {
@@ -54,7 +57,10 @@ impl PdfInspector {
     fn new(_cc: &eframe::CreationContext<'_>) -> Self {
         let mut result = Self {
             page: PdfInspectorPage::Paint,
-            paint_page: Default::default(),
+            paint_page: PdfInspectorPaintPage {
+                text_background: true,
+                ..Default::default()
+            },
             inspector_page: Default::default(),
             pdf_path: std::env::current_dir()
                 .unwrap()
@@ -145,23 +151,48 @@ impl PdfInspector {
         self.page = PdfInspectorPage::Inspector;
     }
     fn paint_page(&mut self, ctx: &egui::Context) {
+        egui::Window::new("paint_window")
+            .scroll([false, true])
+            .default_open(false)
+            .show(ctx, |ui| {
+                let mut is_first = true;
+                for text in &self.paint_page.text_list {
+                    if !text.selected {
+                        continue;
+                    }
+                    if is_first {
+                        is_first = false;
+                    } else {
+                        ui.separator();
+                    }
+
+                    ui.label(format!(
+                        "pos {:?} real {:?} {}",
+                        text.rect, text.widget_real_rect, &text.text
+                    ));
+                }
+            });
+
         let window_y = ctx.screen_rect().height();
         egui::CentralPanel::default().show(ctx, |ui| {
-            for text in &self.paint_page.text_list {
+            for text in &mut self.paint_page.text_list {
                 let mut rect = text.rect;
-                rect.min.y += self.top_panel_height;
-                rect.max.y += self.top_panel_height;
                 (rect.min.y, rect.max.y) = (window_y - rect.max.y, window_y - rect.min.y);
-                ui.painter().rect_filled(rect, 0, text.rect_color);
+                if self.paint_page.text_background {
+                    ui.painter().rect_filled(rect, 0, text.rect_color);
+                }
                 let rich_text =
                     RichText::new(&text.text).font(FontId::proportional(text.text_size));
-                ui.put(rect, egui::Label::new(rich_text));
+                let putted = ui.put(rect, egui::Label::new(rich_text).selectable(false));
+                text.widget_real_rect = putted.rect;
+                (text.widget_real_rect.min.y, text.widget_real_rect.max.y) = (
+                    window_y - text.widget_real_rect.max.y,
+                    window_y - text.widget_real_rect.min.y,
+                );
             }
 
             for r#box in &self.paint_page.box_list {
                 let mut rect = r#box.0;
-                rect.min.y += self.top_panel_height;
-                rect.max.y += self.top_panel_height;
                 (rect.min.y, rect.max.y) = (window_y - rect.max.y, window_y - rect.min.y);
                 ui.painter().rect_filled(rect, 0, r#box.1);
             }
@@ -207,6 +238,8 @@ impl InspectorText {
                 max: right_bottom.into(),
             },
             rect_color,
+            widget_real_rect: egui::Rect::ZERO,
+            selected: true,
         }
     }
 }
@@ -236,17 +269,18 @@ impl eframe::App for PdfInspector {
                     self.clean();
                     self.generate_test_object();
                 }
-                if let Some(mut mouse_position) = mouse_position {
-                    if mouse_position.y >= self.top_panel_height
-                        && self.page == PdfInspectorPage::Paint
-                    {
-                        let window_y = ctx.screen_rect().height();
-                        let mouse_height = window_y - mouse_position.y;
-                        mouse_position.y -= self.top_panel_height;
-                        ui.label(format!(
-                            "mouse position {:?}(-{})",
-                            mouse_position, mouse_height
-                        ));
+                if self.page == PdfInspectorPage::Paint {
+                    ui.checkbox(&mut self.paint_page.text_background, "Box");
+                    if let Some(mut mouse_position) = mouse_position {
+                        if mouse_position.y >= self.top_panel_height {
+                            let window_y = ctx.screen_rect().height();
+                            let mouse_height = window_y - mouse_position.y;
+                            mouse_position.y -= self.top_panel_height;
+                            ui.label(format!(
+                                "mouse position {:?}(-{})",
+                                mouse_position, mouse_height
+                            ));
+                        }
                     }
                 }
             });
