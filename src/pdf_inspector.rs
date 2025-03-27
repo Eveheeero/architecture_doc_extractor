@@ -90,7 +90,7 @@ impl PdfInspector {
         self.paint_page.text_list.clear();
         self.page = PdfInspectorPage::Paint;
     }
-    fn load_pdf_paint(&mut self) {
+    fn load_pdf_paint(&mut self, ctx: &egui::Context) {
         if self.pdf_doc.is_none() {
             let Ok(doc) = lopdf::Document::load(&self.pdf_path) else {
                 self.pdf_page = "Pdf not found".into();
@@ -110,7 +110,7 @@ impl PdfInspector {
             return;
         }
         let contents = crate::pdf::get_page_contents(&doc, page);
-        let extracted = extract_page(contents);
+        let extracted = extract_page(contents, ctx);
         self.paint_page.text_list = extracted.0;
         self.paint_page.box_list = extracted.1;
         self.page = PdfInspectorPage::Paint;
@@ -224,7 +224,7 @@ impl eframe::App for PdfInspector {
                     egui::TextEdit::singleline(&mut self.pdf_page).hint_text("page"),
                 );
                 if ui.button("Paint").clicked() {
-                    self.load_pdf_paint();
+                    self.load_pdf_paint(ctx);
                 }
                 if ui.button("Inspect").clicked() {
                     self.load_pdf_inspect();
@@ -263,6 +263,7 @@ impl eframe::App for PdfInspector {
 
 fn extract_page(
     page: lopdf::content::Content,
+    ctx: &egui::Context,
 ) -> (Vec<InspectorText>, Vec<(egui::Rect, egui::Color32)>) {
     let box_list = Vec::new();
     let mut text_list = Vec::new();
@@ -300,40 +301,33 @@ fn extract_page(
                                 panic!();
                             }
                             let text = String::from_utf8_lossy(&string);
-                            let text_len = text.chars().count() as f32;
+                            let text_width = calc_text_width(&text, text_width, ctx);
                             text_list.push(InspectorText::new(
                                 text,
                                 text_height,
                                 [pointer.0, pointer.1 - text_height],
-                                [
-                                    pointer.0 + text_width * text_len * PDF_TEXT_WIDTH_FACTOR,
-                                    pointer.1,
-                                ],
+                                [pointer.0 + text_width, pointer.1],
                             ));
                         }
                         Object::Array(operands) => {
                             let mut last_x = pointer.0;
                             for operand in operands {
                                 match operand {
-                                    Object::Integer(i) => last_x -= i as f32 / 1000.0,
-                                    Object::Real(i) => last_x -= i / 1000.0,
+                                    Object::Integer(i) => last_x -= i as f32 / 1000.0 * text_width,
+                                    Object::Real(i) => last_x -= i / 1000.0 * text_width,
                                     Object::String(string, _) => {
                                         if text_height != text_width {
                                             panic!();
                                         }
                                         let text = String::from_utf8_lossy(&string);
-                                        let text_len = text.chars().count() as f32;
+                                        let text_width = calc_text_width(&text, text_width, ctx);
                                         text_list.push(InspectorText::new(
                                             text,
                                             text_height,
                                             [last_x, pointer.1 - text_height],
-                                            [
-                                                last_x
-                                                    + text_width * text_len * PDF_TEXT_WIDTH_FACTOR,
-                                                pointer.1,
-                                            ],
+                                            [last_x + text_width, pointer.1],
                                         ));
-                                        last_x += text_width * text_len * PDF_TEXT_WIDTH_FACTOR;
+                                        last_x += text_width;
                                     }
                                     _ => panic!("{:?}", operand),
                                 }
@@ -360,4 +354,15 @@ fn num(obj: &Object) -> f32 {
         Object::Real(o) => *o,
         _ => unimplemented!(),
     }
+}
+
+fn calc_text_width(text: impl AsRef<str>, font_width: f32, ctx: &egui::Context) -> f32 {
+    ctx.fonts(|fonts| {
+        let font_id = FontId::proportional(font_width);
+        let mut width = 0.0;
+        for c in text.as_ref().chars() {
+            width += fonts.glyph_width(&font_id, c);
+        }
+        width
+    })
 }
