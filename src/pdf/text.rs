@@ -2,7 +2,7 @@ use either::Either;
 use lopdf::{content::Operation, Document, Object};
 use rayon::prelude::*;
 use std::sync::Mutex;
-use tracing::trace;
+use tracing::{debug, trace};
 
 /// pdf의 TJ operator에서 문자열을 추출한다.
 /// TJ ex -> ["abc", 3(공백사이즈), "def"] -> "abc    def"
@@ -90,27 +90,19 @@ pub(crate) fn operator_to_chars(
                 let mut last_x = pointer.0;
                 for operand in op.operands {
                     match operand {
-                        Object::String(s, lopdf::StringFormat::Literal) => {
-                            let s = std::str::from_utf8(&s).unwrap();
+                        Object::String(s, m) => {
+                            if m == lopdf::StringFormat::Hexadecimal {
+                                debug!(?s, "Hex in Tj");
+                                continue;
+                            }
+                            let s = String::from_utf8_lossy(&s);
                             for c in s.chars() {
+                                if c == char::REPLACEMENT_CHARACTER {
+                                    continue;
+                                }
                                 let pdf_char = PdfChar {
                                     data: Either::Left(c),
                                     width: font.as_ref().unwrap().get_char_width(c)
-                                        * width_factor
-                                        * font_scale,
-                                    height: height_factor,
-                                    left_bottom: (last_x, pointer.1),
-                                };
-                                last_x += pdf_char.width + char_space;
-                                result.push(pdf_char);
-                            }
-                            last_x += word_space;
-                        }
-                        Object::String(s, lopdf::StringFormat::Hexadecimal) => {
-                            for c in s {
-                                let pdf_char = PdfChar {
-                                    data: Either::Right(c),
-                                    width: font.as_ref().unwrap().get_hex_width(c)
                                         * width_factor
                                         * font_scale,
                                     height: height_factor,
@@ -128,27 +120,19 @@ pub(crate) fn operator_to_chars(
                                         last_x -= i as f32 / 1000.0 * width_factor
                                     }
                                     Object::Real(i) => last_x -= i / 1000.0 * width_factor,
-                                    Object::String(s, lopdf::StringFormat::Literal) => {
-                                        let s = std::str::from_utf8(&s).unwrap();
+                                    Object::String(s, m) => {
+                                        if m == lopdf::StringFormat::Hexadecimal {
+                                            debug!(?s, "Hex in Tj");
+                                            continue;
+                                        }
+                                        let s = String::from_utf8_lossy(&s);
                                         for c in s.chars() {
+                                            if c == char::REPLACEMENT_CHARACTER {
+                                                continue;
+                                            }
                                             let pdf_char = PdfChar {
                                                 data: Either::Left(c),
                                                 width: font.as_ref().unwrap().get_char_width(c)
-                                                    * width_factor
-                                                    * font_scale,
-                                                height: height_factor,
-                                                left_bottom: (last_x, pointer.1),
-                                            };
-                                            last_x += pdf_char.width + char_space;
-                                            result.push(pdf_char);
-                                        }
-                                        last_x += word_space;
-                                    }
-                                    Object::String(s, lopdf::StringFormat::Hexadecimal) => {
-                                        for c in s {
-                                            let pdf_char = PdfChar {
-                                                data: Either::Right(c),
-                                                width: font.as_ref().unwrap().get_hex_width(c)
                                                     * width_factor
                                                     * font_scale,
                                                 height: height_factor,

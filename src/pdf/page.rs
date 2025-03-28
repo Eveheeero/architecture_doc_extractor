@@ -75,8 +75,12 @@ impl<'pdf> PdfFonts<'pdf> {
             return None;
         };
         let font = self.0.dereference(font).unwrap().1.as_dict().unwrap();
-        let widths = font.get(b"Widths").unwrap().as_array().unwrap();
-        let first_char = font.get(b"FirstChar").unwrap().as_i64().unwrap();
+        let Ok(widths) = font.get(b"Widths").and_then(lopdf::Object::as_array) else {
+            return None;
+        };
+        let Ok(first_char) = font.get(b"FirstChar").and_then(lopdf::Object::as_i64) else {
+            return None;
+        };
         Some(PdfFont {
             first_char: first_char as usize,
             widths: widths
