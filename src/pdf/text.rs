@@ -157,6 +157,74 @@ pub(crate) fn operator_to_chars(
     result
 }
 
+pub(crate) struct PdfString(Vec<PdfChar>);
+impl PdfString {
+    pub(crate) fn string(&self) -> String {
+        todo!()
+    }
+    pub(crate) fn width(&self) -> f32 {
+        let mut left = f32::NAN;
+        let mut right = f32::NAN;
+        for c in &self.0 {
+            let (char_left, _) = c.left_bottom;
+            let char_right = char_left + c.width;
+            if left.is_nan() {
+                left = char_left;
+            }
+            if right.is_nan() {
+                right = char_right;
+            }
+            if char_left < left {
+                left = char_left;
+            }
+            if char_right > right {
+                right = char_right;
+            }
+        }
+        right - left
+    }
+    pub(crate) fn height(&self) -> f32 {
+        let mut bottom = f32::NAN;
+        let mut top = f32::NAN;
+        for c in &self.0 {
+            let (_, char_bottom) = c.left_bottom;
+            let char_top = char_bottom + c.height;
+            if bottom.is_nan() {
+                bottom = char_bottom;
+            }
+            if top.is_nan() {
+                top = char_bottom;
+            }
+            if char_bottom < bottom {
+                bottom = char_bottom;
+            }
+            if char_top > top {
+                top = char_top;
+            }
+        }
+        top - bottom
+    }
+    pub(crate) fn left_bottom(&self) -> (f32, f32) {
+        let mut left = f32::NAN;
+        let mut bottom = f32::NAN;
+        for c in &self.0 {
+            let (char_left, char_bottom) = c.left_bottom;
+            if left.is_nan() {
+                left = char_left;
+            }
+            if bottom.is_nan() {
+                bottom = char_bottom;
+            }
+            if char_left < left {
+                left = char_left;
+            }
+            if char_bottom < bottom {
+                bottom = char_bottom;
+            }
+        }
+        (left, bottom)
+    }
+}
 pub(crate) struct PdfChar {
     data: Either<char, u8>,
     width: f32,

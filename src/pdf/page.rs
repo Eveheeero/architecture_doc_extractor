@@ -9,6 +9,15 @@ pub(crate) fn page_to_texts(doc: &Document, page: u32) -> Vec<String> {
     super::operator_to_texts(doc, get_page_contents(doc, page).operations)
 }
 
+pub(crate) fn page_to_texts2(doc: &Document, page: u32) -> Vec<super::PdfString> {
+    debug!("{}페이지 텍스트 추출중", page);
+    let chars = super::operator_to_chars(
+        crate::pdf::get_pdf_fonts(doc, page),
+        get_page_contents(doc, page).operations,
+    );
+    todo!();
+}
+
 pub(crate) fn get_page_contents(doc: &Document, page: u32) -> Content {
     let binding = doc.get_pages();
     let page = binding.get(&page).unwrap();
@@ -91,12 +100,8 @@ impl<'pdf> PdfFonts<'pdf> {
     }
 }
 impl PdfFont {
-    pub fn get_char_width(&self, c: char) -> f32 {
+    pub(crate) fn get_char_width(&self, c: char) -> f32 {
         let index = c as usize - self.first_char;
-        self.widths[index]
-    }
-    pub fn get_hex_width(&self, c: impl Into<usize>) -> f32 {
-        let index = c.into() - self.first_char;
         self.widths[index]
     }
 }
