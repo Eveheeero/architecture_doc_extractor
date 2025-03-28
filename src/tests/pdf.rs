@@ -1,7 +1,12 @@
+fn get_pdf() -> &'static lopdf::Document {
+    static ONCE: std::sync::OnceLock<lopdf::Document> = std::sync::OnceLock::new();
+    ONCE.get_or_init(|| lopdf::Document::load("src/intel/intel.pdf").unwrap())
+}
+
 #[test]
 fn extract_page() {
     crate::setup_logger();
-    let doc = lopdf::Document::load("src/intel/intel.pdf").unwrap();
+    let doc = get_pdf();
     let contents1 = crate::pdf::get_page_contents(&doc, 129);
     let contents2 = crate::pdf::get_page_contents2(&doc, 129);
 
@@ -13,7 +18,7 @@ fn extract_page() {
 #[test]
 fn print_page_contents() {
     crate::setup_logger();
-    let doc = lopdf::Document::load("src/intel/intel.pdf").unwrap();
+    let doc = get_pdf();
     let contents = crate::pdf::get_page_contents(&doc, 129);
     for operation in contents.operations {
         if !matches!(
@@ -29,9 +34,17 @@ fn print_page_contents() {
 #[test]
 fn extract_page_texts() {
     crate::setup_logger();
-    let doc = lopdf::Document::load("src/intel/intel.pdf").unwrap();
+    let doc = get_pdf();
     let texts = crate::pdf::page_to_texts(&doc, 129);
     for text in texts {
         println!("{}", text);
     }
+}
+
+#[test]
+fn char_width() {
+    crate::setup_logger();
+    let doc = get_pdf();
+    assert_eq!(crate::pdf::get_char_width(&doc, 1, "TT4", ' '), 247);
+    assert_eq!(crate::pdf::get_char_width(&doc, 1, "TT4", '!'), 194);
 }

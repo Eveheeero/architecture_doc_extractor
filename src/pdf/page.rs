@@ -33,3 +33,28 @@ pub(crate) fn get_page_contents2(doc: &Document, page: u32) -> Content {
         .unwrap();
     Content::decode(&page_contents.decompressed_content().unwrap()).unwrap()
 }
+
+pub(crate) fn get_page_resources(doc: &Document, page: u32) -> &lopdf::Dictionary {
+    let pages = doc.get_pages();
+    let page = pages.get(&page).unwrap();
+    let page = doc.get_object(*page).unwrap();
+    let page = page.as_dict().unwrap();
+    let resources = page.get(b"Resources").unwrap();
+    doc.dereference(resources).unwrap().1.as_dict().unwrap()
+}
+
+pub(crate) fn get_char_width(
+    doc: &Document,
+    page: u32,
+    font_name: impl AsRef<str>,
+    c: char,
+) -> i64 {
+    let resources = get_page_resources(doc, page);
+    let fonts = resources.get(b"Font").unwrap().as_dict().unwrap();
+    let font = fonts.get(font_name.as_ref().as_bytes()).unwrap();
+    let font = doc.dereference(font).unwrap().1.as_dict().unwrap();
+    let widths = font.get(b"Widths").unwrap().as_array().unwrap();
+    let first_char = font.get(b"FirstChar").unwrap().as_i64().unwrap();
+    let index = c as i64 - first_char;
+    widths[index as usize].as_i64().unwrap()
+}

@@ -426,6 +426,8 @@ fn num(obj: &Object) -> f32 {
     }
 }
 
+// egui의 경우는 kerning + glyph + pixel rounding을 사용하지만
+// pdf의 경우는 glyph(Tf, Tfs, in resource directory) + Tc + Tw를 사용해야 한다
 fn calc_text_width(
     text: impl AsRef<str>,
     font_width: f32,
