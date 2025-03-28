@@ -91,4 +91,8 @@ impl PdfFont {
         let index = c as usize - self.first_char;
         self.widths[index]
     }
+    pub fn get_hex_width(&self, c: impl Into<usize>) -> f32 {
+        let index = c.into() - self.first_char;
+        self.widths[index]
+    }
 }

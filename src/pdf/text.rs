@@ -1,3 +1,4 @@
+use either::Either;
 use lopdf::{content::Operation, Document, Object};
 use rayon::prelude::*;
 use std::sync::Mutex;
@@ -46,6 +47,159 @@ pub(crate) const PDF_TEXT_HEIGHT_FACTOR: f32 = 1.35;
 /// text(x:80, length:12, width:9) ends at x: 134
 pub(crate) const PDF_TEXT_WIDTH_FACTOR: f32 = 0.43;
 
+pub(crate) fn operator_to_chars(
+    fonts: crate::pdf::PdfFonts,
+    data: impl IntoIterator<Item = Operation>,
+) -> Vec<PdfChar> {
+    let mut result = Vec::new();
+    let mut font = None;
+    let mut font_scale = 1.0;
+    let mut word_space = 0.0;
+    let mut char_space = 0.0;
+    let mut pointer = (0.0, 0.0);
+    let mut width_factor = 0.0;
+    let mut height_factor = 0.0;
+    for op in data.into_iter() {
+        match op.operator.as_str() {
+            "Tfs" => unimplemented!(),
+            "Tf" => {
+                font = fonts.get(op.operands[0].as_name_str().unwrap());
+                font_scale = extract_num(&op.operands[1]);
+            }
+            "Tc" => char_space = extract_num(&op.operands[0]),
+            "Tw" => word_space = extract_num(&op.operands[0]),
+            "T*" => {
+                pointer.1 -= height_factor * PDF_TEXT_HEIGHT_FACTOR;
+            }
+            "Td" | "TD" => {
+                pointer.0 += extract_num(&op.operands[0]) * width_factor;
+                pointer.1 += extract_num(&op.operands[1]) * height_factor;
+            }
+            "Tm" | "Tlm" => {
+                if extract_num(&op.operands[0]) == extract_num(&op.operands[3])
+                    && extract_num(&op.operands[1]) == 0.0
+                    && extract_num(&op.operands[2]) == 0.0
+                {
+                    pointer.0 = extract_num(&op.operands[4]);
+                    pointer.1 = extract_num(&op.operands[5]);
+                }
+                width_factor = extract_num(&op.operands[0]);
+                height_factor = extract_num(&op.operands[3]);
+            }
+            "Tj" | "TJ" => {
+                let mut last_x = pointer.0;
+                for operand in op.operands {
+                    match operand {
+                        Object::String(s, lopdf::StringFormat::Literal) => {
+                            let s = std::str::from_utf8(&s).unwrap();
+                            for c in s.chars() {
+                                let pdf_char = PdfChar {
+                                    data: Either::Left(c),
+                                    width: font.as_ref().unwrap().get_char_width(c)
+                                        * width_factor
+                                        * font_scale,
+                                    height: height_factor,
+                                    left_bottom: (last_x, pointer.1),
+                                };
+                                last_x += pdf_char.width + char_space;
+                                result.push(pdf_char);
+                            }
+                            last_x += word_space;
+                        }
+                        Object::String(s, lopdf::StringFormat::Hexadecimal) => {
+                            for c in s {
+                                let pdf_char = PdfChar {
+                                    data: Either::Right(c),
+                                    width: font.as_ref().unwrap().get_hex_width(c)
+                                        * width_factor
+                                        * font_scale,
+                                    height: height_factor,
+                                    left_bottom: (last_x, pointer.1),
+                                };
+                                last_x += pdf_char.width + char_space;
+                                result.push(pdf_char);
+                            }
+                            last_x += word_space;
+                        }
+                        Object::Array(operands) => {
+                            for operand in operands {
+                                match operand {
+                                    Object::Integer(i) => {
+                                        last_x -= i as f32 / 1000.0 * width_factor
+                                    }
+                                    Object::Real(i) => last_x -= i / 1000.0 * width_factor,
+                                    Object::String(s, lopdf::StringFormat::Literal) => {
+                                        let s = std::str::from_utf8(&s).unwrap();
+                                        for c in s.chars() {
+                                            let pdf_char = PdfChar {
+                                                data: Either::Left(c),
+                                                width: font.as_ref().unwrap().get_char_width(c)
+                                                    * width_factor
+                                                    * font_scale,
+                                                height: height_factor,
+                                                left_bottom: (last_x, pointer.1),
+                                            };
+                                            last_x += pdf_char.width + char_space;
+                                            result.push(pdf_char);
+                                        }
+                                        last_x += word_space;
+                                    }
+                                    Object::String(s, lopdf::StringFormat::Hexadecimal) => {
+                                        for c in s {
+                                            let pdf_char = PdfChar {
+                                                data: Either::Right(c),
+                                                width: font.as_ref().unwrap().get_hex_width(c)
+                                                    * width_factor
+                                                    * font_scale,
+                                                height: height_factor,
+                                                left_bottom: (last_x, pointer.1),
+                                            };
+                                            last_x += pdf_char.width + char_space;
+                                            result.push(pdf_char);
+                                        }
+                                        last_x += word_space;
+                                    }
+                                    _ => panic!("{:?}", operand),
+                                }
+                            }
+                        }
+                        _ => panic!("{:?}", operand),
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    result
+}
+
+pub(crate) struct PdfChar {
+    data: Either<char, u8>,
+    width: f32,
+    height: f32,
+    // x, height
+    left_bottom: (f32, f32),
+}
+impl PdfChar {
+    pub(crate) fn data(&self) -> char {
+        if self.data.is_left() {
+            return self.data.left().unwrap();
+        }
+
+        let data = self.data.right().unwrap();
+        match data {
+            0x92 => '\'',
+            0x93 => '\"',
+            0x94 => '\"',
+            0x95 => '-',
+            0x96 => '-',
+            0x97 => '-',
+            0x8a => '-',
+            _ => unimplemented!("{}", data),
+        }
+    }
+}
+
 /// pdf 페이지 내부 정렬 순서에 따라 텍스트 파싱
 pub(crate) fn operator_to_texts(
     doc: &Document,
@@ -59,7 +213,7 @@ pub(crate) fn operator_to_texts(
         .filter(|op| {
             matches!(
                 op.operator.as_str(),
-                "Tj" | "TJ" | "TD" | "Td" | "Tm" | "Tlm" | "T*"
+                "Tj" | "TJ" | "TD" | "Td" | "Tm" | "Tlm" | "T*" | "Tc" | "Tw" | "Tf" | "Tfs"
             )
         })
         .filter_map(|op| {
