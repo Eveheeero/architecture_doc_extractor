@@ -45,6 +45,14 @@ fn extract_page_texts() {
 fn char_width() {
     crate::setup_logger();
     let doc = get_pdf();
-    assert_eq!(crate::pdf::get_char_width(&doc, 1, "TT4", ' '), 247);
-    assert_eq!(crate::pdf::get_char_width(&doc, 1, "TT4", '!'), 194);
+    let page = 1;
+    assert_eq!(crate::pdf::get_char_width(&doc, page, "TT4", ' '), 0.247);
+    assert_eq!(crate::pdf::get_char_width(&doc, page, "TT4", '!'), 0.194);
+
+    let fonts = crate::pdf::get_pdf_fonts(doc, page);
+    let tt4 = fonts.get("TT4");
+    assert!(tt4.is_some());
+    let tt4 = tt4.unwrap();
+    assert_eq!(tt4.get_char_width(' '), 0.247);
+    assert_eq!(tt4.get_char_width('!'), 0.194);
 }
