@@ -1,4 +1,5 @@
 use crate::pdf::PDF_TEXT_HEIGHT_FACTOR;
+use ab_glyph::Font;
 use eframe::egui::{self, FontId, RichText};
 use lopdf::Object;
 use std::collections::BTreeMap;
@@ -12,6 +13,8 @@ pub(super) fn main() {
 }
 
 struct PdfInspector {
+    font: ab_glyph::FontArc,
+
     page: PdfInspectorPage,
     paint_page: PdfInspectorPaintPage,
     inspector_page: PdfInspectorInspectorPage,
@@ -56,6 +59,8 @@ fn rand_color() -> egui::Color32 {
 impl PdfInspector {
     fn new(_cc: &eframe::CreationContext<'_>) -> Self {
         let mut result = Self {
+            font: ab_glyph::FontArc::try_from_slice(epaint_default_fonts::UBUNTU_LIGHT).unwrap(),
+
             page: PdfInspectorPage::Paint,
             paint_page: PdfInspectorPaintPage {
                 text_background: true,
@@ -116,7 +121,7 @@ impl PdfInspector {
             return;
         }
         let contents = crate::pdf::get_page_contents(&doc, page);
-        let extracted = extract_page(contents, ctx);
+        let extracted = extract_page(contents, ctx, &self.font);
         self.paint_page.text_list = extracted.0;
         self.paint_page.box_list = extracted.1;
         self.page = PdfInspectorPage::Paint;
@@ -330,6 +335,7 @@ impl eframe::App for PdfInspector {
 fn extract_page(
     page: lopdf::content::Content,
     ctx: &egui::Context,
+    font: &ab_glyph::FontArc,
 ) -> (Vec<InspectorText>, Vec<(egui::Rect, egui::Color32)>) {
     let box_list = Vec::new();
     let mut text_list = Vec::new();
@@ -367,7 +373,7 @@ fn extract_page(
                                 panic!();
                             }
                             let text = String::from_utf8_lossy(&string);
-                            let text_width = calc_text_width(&text, text_width, ctx);
+                            let text_width = calc_text_width(&text, text_width, ctx, font);
                             text_list.push(InspectorText::new(
                                 text,
                                 text_height,
@@ -386,7 +392,8 @@ fn extract_page(
                                             panic!();
                                         }
                                         let text = String::from_utf8_lossy(&string);
-                                        let text_width = calc_text_width(&text, text_width, ctx);
+                                        let text_width =
+                                            calc_text_width(&text, text_width, ctx, font);
                                         text_list.push(InspectorText::new(
                                             text,
                                             text_height,
@@ -408,9 +415,6 @@ fn extract_page(
         }
     }
 
-    for text in &text_list {
-        println!("{:?} {}", text.rect, text.text);
-    }
     (text_list, box_list)
 }
 
@@ -422,12 +426,29 @@ fn num(obj: &Object) -> f32 {
     }
 }
 
-fn calc_text_width(text: impl AsRef<str>, font_width: f32, ctx: &egui::Context) -> f32 {
+fn calc_text_width(
+    text: impl AsRef<str>,
+    font_width: f32,
+    ctx: &egui::Context,
+    font: &ab_glyph::FontArc,
+) -> f32 {
     ctx.fonts(|fonts| {
+        use ab_glyph::ScaleFont;
         let font_id = FontId::proportional(font_width);
+        let pixels_per_point = fonts.pixels_per_point();
+        let mut last_glyph_id = None;
         let mut width = 0.0;
         for c in text.as_ref().chars() {
+            let glyph_id = font.glyph_id(c);
+            if let Some(last_glyph_id) = last_glyph_id {
+                // pair kerning in layout_section
+                let kerning =
+                    font.as_scaled(font_width).kern(last_glyph_id, glyph_id) / pixels_per_point;
+                width += kerning;
+            }
             width += fonts.glyph_width(&font_id, c);
+            width = (width * pixels_per_point).round() / pixels_per_point;
+            last_glyph_id = Some(glyph_id);
         }
         width
     })
