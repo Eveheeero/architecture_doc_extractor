@@ -1,7 +1,7 @@
 use either::Either;
 use lopdf::{content::Operation, Document, Object};
 use rayon::prelude::*;
-use std::sync::Mutex;
+use std::{collections::LinkedList, sync::Mutex};
 use tracing::{debug, trace};
 
 /// pdf의 TJ operator에서 문자열을 추출한다.
@@ -101,12 +101,13 @@ pub(crate) fn operator_to_chars(
                                     continue;
                                 }
                                 let pdf_char = PdfChar {
-                                    data: Either::Left(c),
+                                    raw: Either::Left(c),
                                     width: font.as_ref().unwrap().get_char_width(c)
                                         * width_factor
                                         * font_scale,
                                     height: height_factor,
                                     left_bottom: (last_x, pointer.1),
+                                    represent_as: None,
                                 };
                                 last_x += pdf_char.width + char_space;
                                 result.push(pdf_char);
@@ -131,12 +132,13 @@ pub(crate) fn operator_to_chars(
                                                 continue;
                                             }
                                             let pdf_char = PdfChar {
-                                                data: Either::Left(c),
+                                                raw: Either::Left(c),
                                                 width: font.as_ref().unwrap().get_char_width(c)
                                                     * width_factor
                                                     * font_scale,
                                                 height: height_factor,
                                                 left_bottom: (last_x, pointer.1),
+                                                represent_as: None,
                                             };
                                             last_x += pdf_char.width + char_space;
                                             result.push(pdf_char);
@@ -156,11 +158,27 @@ pub(crate) fn operator_to_chars(
     }
     result
 }
+pub(crate) fn detect_strings(mut cs: Vec<PdfChar>) -> Vec<PdfString> {
+    cs.iter_mut().for_each(PdfChar::make_ready);
+    let nearby = |s: &PdfString, c: &PdfChar| {
+        todo!("s와 c가 가깝게 있는지 확인");
+        true
+    };
+    let mut result = Vec::new();
+    while let Some(c) = cs.pop() {
+        let Some(mut s) = result.iter().find(|s| nearby(s, &c)) else {
+            result.push(PdfString([c].into()));
+            continue;
+        };
+        todo!("앞에 있는지, 뒤에 있는지 등을 판단해서 배치. 위 아래 있는지 판단해서 제곱 기호나 여러 기호로 변경");
+    }
+    result
+}
 
 pub(crate) struct PdfString(Vec<PdfChar>);
 impl PdfString {
-    pub(crate) fn string(&self) -> String {
-        todo!()
+    pub(crate) fn get(&self) -> String {
+        self.0.iter().map(PdfChar::get).collect()
     }
     pub(crate) fn width(&self) -> f32 {
         let mut left = f32::NAN;
@@ -226,29 +244,36 @@ impl PdfString {
     }
 }
 pub(crate) struct PdfChar {
-    data: Either<char, u8>,
+    raw: Either<char, u8>,
     width: f32,
     height: f32,
     // x, height
     left_bottom: (f32, f32),
+    represent_as: Option<String>,
 }
 impl PdfChar {
-    pub(crate) fn data(&self) -> char {
-        if self.data.is_left() {
-            return self.data.left().unwrap();
+    pub(crate) fn make_ready(&mut self) {
+        if self.represent_as.is_some() {
+            return;
         }
-
-        let data = self.data.right().unwrap();
-        match data {
-            0x92 => '\'',
-            0x93 => '\"',
-            0x94 => '\"',
-            0x95 => '-',
-            0x96 => '-',
-            0x97 => '-',
-            0x8a => '-',
+        if self.raw.is_left() {
+            self.represent_as = Some(self.raw.left().unwrap().to_string());
+        }
+        let data = self.raw.right().unwrap();
+        let data = match data {
+            0x92 => '\''.into(),
+            0x93 => '\"'.into(),
+            0x94 => '\"'.into(),
+            0x95 => '-'.into(),
+            0x96 => '-'.into(),
+            0x97 => '-'.into(),
+            0x8a => '-'.into(),
             _ => unimplemented!("{}", data),
-        }
+        };
+        self.represent_as = Some(data);
+    }
+    pub(crate) fn get(&self) -> &str {
+        self.represent_as.as_ref().expect("make_ready not called")
     }
 }
 
