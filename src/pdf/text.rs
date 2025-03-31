@@ -1,4 +1,5 @@
 use either::Either;
+use geo::{Euclidean, Rect};
 use lopdf::{content::Operation, Document, Object};
 use rayon::prelude::*;
 use std::{collections::LinkedList, sync::Mutex};
@@ -100,16 +101,21 @@ pub(crate) fn operator_to_chars(
                                 if c == char::REPLACEMENT_CHARACTER {
                                     continue;
                                 }
+                                let width = font.as_ref().unwrap().get_char_width(c)
+                                    * width_factor
+                                    * font_scale;
+                                let height = height_factor;
+                                let _left_bottom = (last_x, pointer.1);
+                                let rect = Rect::new(
+                                    [last_x, pointer.1],
+                                    [last_x + width, pointer.1 + height],
+                                );
                                 let pdf_char = PdfChar {
                                     raw: Either::Left(c),
-                                    width: font.as_ref().unwrap().get_char_width(c)
-                                        * width_factor
-                                        * font_scale,
-                                    height: height_factor,
-                                    left_bottom: (last_x, pointer.1),
+                                    rect,
                                     represent_as: None,
                                 };
-                                last_x += pdf_char.width + char_space;
+                                last_x += rect.width() + char_space;
                                 result.push(pdf_char);
                             }
                             last_x += word_space;
@@ -131,16 +137,21 @@ pub(crate) fn operator_to_chars(
                                             if c == char::REPLACEMENT_CHARACTER {
                                                 continue;
                                             }
+                                            let width = font.as_ref().unwrap().get_char_width(c)
+                                                * width_factor
+                                                * font_scale;
+                                            let height = height_factor;
+                                            let _left_bottom = (last_x, pointer.1);
+                                            let rect = Rect::new(
+                                                [last_x, pointer.1],
+                                                [last_x + width, pointer.1 + height],
+                                            );
                                             let pdf_char = PdfChar {
                                                 raw: Either::Left(c),
-                                                width: font.as_ref().unwrap().get_char_width(c)
-                                                    * width_factor
-                                                    * font_scale,
-                                                height: height_factor,
-                                                left_bottom: (last_x, pointer.1),
+                                                rect,
                                                 represent_as: None,
                                             };
-                                            last_x += pdf_char.width + char_space;
+                                            last_x += rect.width() + char_space;
                                             result.push(pdf_char);
                                         }
                                         last_x += word_space;
@@ -180,58 +191,35 @@ impl PdfString {
     pub(crate) fn get(&self) -> String {
         self.0.iter().map(PdfChar::get).collect()
     }
-    pub(crate) fn width(&self) -> f32 {
-        let mut left = f32::NAN;
+    pub(crate) fn rect(&self) -> Rect<f32> {
+        if self.0.is_empty() {
+            panic!("no rect")
+        }
         let mut right = f32::NAN;
+        let mut top = f32::NAN;
+        let mut left = f32::NAN;
+        let mut bottom = f32::NAN;
         for c in &self.0 {
-            let (char_left, _) = c.left_bottom;
-            let char_right = char_left + c.width;
-            if left.is_nan() {
-                left = char_left;
-            }
+            let rect = c.rect;
+            let (char_right, char_top) = rect.max().x_y();
+            let (char_left, char_bottom) = rect.min().x_y();
             if right.is_nan() {
                 right = char_right;
             }
-            if char_left < left {
+            if top.is_nan() {
+                top = char_top;
+            }
+            if left.is_nan() {
                 left = char_left;
+            }
+            if bottom.is_nan() {
+                bottom = char_bottom;
             }
             if char_right > right {
                 right = char_right;
             }
-        }
-        right - left
-    }
-    pub(crate) fn height(&self) -> f32 {
-        let mut bottom = f32::NAN;
-        let mut top = f32::NAN;
-        for c in &self.0 {
-            let (_, char_bottom) = c.left_bottom;
-            let char_top = char_bottom + c.height;
-            if bottom.is_nan() {
-                bottom = char_bottom;
-            }
-            if top.is_nan() {
-                top = char_bottom;
-            }
-            if char_bottom < bottom {
-                bottom = char_bottom;
-            }
             if char_top > top {
                 top = char_top;
-            }
-        }
-        top - bottom
-    }
-    pub(crate) fn left_bottom(&self) -> (f32, f32) {
-        let mut left = f32::NAN;
-        let mut bottom = f32::NAN;
-        for c in &self.0 {
-            let (char_left, char_bottom) = c.left_bottom;
-            if left.is_nan() {
-                left = char_left;
-            }
-            if bottom.is_nan() {
-                bottom = char_bottom;
             }
             if char_left < left {
                 left = char_left;
@@ -240,15 +228,13 @@ impl PdfString {
                 bottom = char_bottom;
             }
         }
-        (left, bottom)
+        Rect::new([left, bottom], [right, top])
     }
 }
 pub(crate) struct PdfChar {
     raw: Either<char, u8>,
-    width: f32,
-    height: f32,
     // x, height
-    left_bottom: (f32, f32),
+    rect: Rect<f32>,
     represent_as: Option<String>,
 }
 impl PdfChar {
