@@ -186,9 +186,11 @@ pub(crate) fn detect_strings(mut cs: Vec<PdfChar>) -> Vec<PdfString> {
             s.0.iter()
                 .position(|sc| sc.rect.center().x > c.rect.center().x);
         if let Some(position) = position {
-            if let Some(before_y) = s.0.get(position - 1).map(|before| before.rect.center().y) {
-                if before_y + 10.0 < c.rect.center().y {
-                    todo!("represent as 특수문자로 변경");
+            if position != 0 {
+                if let Some(before_y) = s.0.get(position - 1).map(|before| before.rect.center().y) {
+                    if before_y + 10.0 < c.rect.center().y {
+                        todo!("represent as 특수문자로 변경");
+                    }
                 }
             }
             s.0.insert(position, c);
@@ -236,6 +238,7 @@ impl PdfChar {
         }
         if self.raw.is_left() {
             self.represent_as = Some(self.raw.left().unwrap().to_string());
+            return;
         }
         let data = self.raw.right().unwrap();
         let data = match data {

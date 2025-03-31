@@ -1,7 +1,6 @@
 #![allow(dead_code)]
 
 use lopdf::{content::Content, Document};
-use rayon::prelude::*;
 use tracing::debug;
 
 pub(crate) fn page_to_texts(doc: &Document, page: u32) -> Vec<String> {
@@ -15,6 +14,10 @@ pub(crate) fn page_to_texts2(doc: &Document, page: u32) -> Vec<super::PdfString>
         crate::pdf::get_pdf_fonts(doc, page),
         get_page_contents(doc, page).operations,
     );
+    let strings = super::detect_strings(chars);
+    for string in strings {
+        println!("{:?}", string.get());
+    }
     todo!();
 }
 
