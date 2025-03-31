@@ -238,3 +238,38 @@ impl PdfChar {
         self.represent_as.as_ref().expect("make_ready not called")
     }
 }
+pub(crate) struct PdfBoxes(Vec<PdfBox>);
+pub(crate) struct PdfBox {
+    id: usize,
+    rect: Rect<f32>,
+}
+
+pub(crate) fn operator_to_boxes(data: impl IntoIterator<Item = Operation>) -> PdfBoxes {
+    let mut result = Vec::new();
+
+    let mut rect = Rect::new([0.0, 0.0], [0.0, 0.0]);
+    for op in data.into_iter() {
+        match op.operator.as_str() {
+            "f" | "F" => {
+                result.push(PdfBox {
+                    id: result.len(),
+                    rect,
+                });
+            }
+            "re" => {
+                let [x, y, w, h] = op
+                    .operands
+                    .iter()
+                    .map(|o| o.as_f32().unwrap())
+                    .collect::<Vec<_>>()[..]
+                else {
+                    panic!()
+                };
+                rect = Rect::new([x, y], [x + w, y + h]);
+            }
+            _ => {}
+        }
+    }
+
+    PdfBoxes(result)
+}

@@ -18,6 +18,10 @@ pub(crate) fn page_to_texts_v2(doc: &Document, page: u32) -> Vec<crate::pdf::v2:
     crate::pdf::v2::sort_strings(&mut strings);
     strings
 }
+pub(crate) fn page_to_boxes_v2(doc: &Document, page: u32) -> crate::pdf::v2::PdfBoxes {
+    debug!("{}페이지 라인 추출중", page);
+    crate::pdf::v2::operator_to_boxes(get_page_contents(doc, page).operations)
+}
 
 pub(crate) fn get_page_contents(doc: &Document, page: u32) -> Content {
     let binding = doc.get_pages();
