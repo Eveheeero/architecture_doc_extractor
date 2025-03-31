@@ -1,7 +1,8 @@
 mod result;
 mod v1;
+mod v2;
 
-use crate::pdf;
+use crate::pdf::{self, v2::PdfString};
 use result::Instruction;
 use std::{collections::HashMap, sync::Once};
 
@@ -9,18 +10,18 @@ pub fn main() {
     let mut result = Vec::new();
     for (from, to) in [(129, 734), (742, 1476), (1481, 2196), (2198, 2266)] {
         let data = extract_text(from, to);
-        result.append(&mut v1::parse_instructions(data));
+        result.append(&mut v2::parse_instructions(data));
     }
     let saved_instructions = save_instructions(result);
     saved_list_to_rust_enum(saved_instructions);
 }
 
-fn extract_text(from: u32, to: u32) -> Vec<Vec<String>> {
+fn extract_text(from: u32, to: u32) -> Vec<Vec<PdfString>> {
     let doc = lopdf::Document::load_mem(include_bytes!("intel.pdf")).unwrap();
     use rayon::prelude::*;
-    let texts: Vec<Vec<String>> = (from..to)
+    let texts: Vec<Vec<PdfString>> = (from..to)
         .into_par_iter()
-        .map(|index| pdf::page_to_texts_v1(&doc, index))
+        .map(|index| pdf::page_to_texts_v2(&doc, index))
         .collect();
     let file_name = format!("intel{from}_{to}.txt");
     if !std::fs::metadata(&file_name).is_ok() {
@@ -28,7 +29,7 @@ fn extract_text(from: u32, to: u32) -> Vec<Vec<String>> {
             file_name,
             texts
                 .iter()
-                .map(|x| x.join("\n"))
+                .map(|x| x.iter().map(PdfString::get).collect::<Vec<_>>().join("\n"))
                 .collect::<Vec<_>>()
                 .join("\n--------------------------------------------------\n"),
         )

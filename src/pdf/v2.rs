@@ -174,7 +174,12 @@ pub(crate) fn sort_strings(d: &mut Vec<PdfString>) {
             .partial_cmp(&b.rect().center().y)
             .unwrap();
         if height == Ordering::Equal {
-            let x = a.rect().width().partial_cmp(&b.rect().width()).unwrap();
+            let x = a
+                .rect()
+                .center()
+                .x
+                .partial_cmp(&b.rect().center().x)
+                .unwrap();
             x
         } else {
             height.reverse()
