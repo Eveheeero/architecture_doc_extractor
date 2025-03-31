@@ -35,7 +35,7 @@ fn print_page_contents() {
 fn extract_page_texts() {
     crate::setup_logger();
     let doc = get_pdf();
-    let texts = crate::pdf::page_to_texts(&doc, 129);
+    let texts = crate::pdf::page_to_texts_v1(&doc, 129);
     for text in texts {
         println!("{}", text);
     }

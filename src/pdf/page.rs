@@ -3,22 +3,20 @@
 use lopdf::{content::Content, Document};
 use tracing::debug;
 
-pub(crate) fn page_to_texts(doc: &Document, page: u32) -> Vec<String> {
+pub(crate) fn page_to_texts_v1(doc: &Document, page: u32) -> Vec<String> {
     debug!("{}페이지 텍스트 추출중", page);
-    super::operator_to_texts(doc, get_page_contents(doc, page).operations)
+    crate::pdf::v1::operator_to_texts(doc, get_page_contents(doc, page).operations)
 }
 
-pub(crate) fn page_to_texts2(doc: &Document, page: u32) -> Vec<super::PdfString> {
+pub(crate) fn page_to_texts_v2(doc: &Document, page: u32) -> Vec<crate::pdf::v2::PdfString> {
     debug!("{}페이지 텍스트 추출중", page);
-    let chars = super::operator_to_chars(
+    let chars = crate::pdf::v2::operator_to_chars(
         crate::pdf::get_pdf_fonts(doc, page),
         get_page_contents(doc, page).operations,
     );
-    let strings = super::detect_strings(chars);
-    for string in strings {
-        println!("{:?}", string.get());
-    }
-    todo!();
+    let mut strings = crate::pdf::v2::detect_strings(chars);
+    crate::pdf::v2::sort_strings(&mut strings);
+    strings
 }
 
 pub(crate) fn get_page_contents(doc: &Document, page: u32) -> Content {

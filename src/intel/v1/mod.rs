@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 mod parse_section;
 
 use super::result::Instruction;
