@@ -1,5 +1,3 @@
-#![allow(unused_imports)]
-
 mod page;
 mod text;
 

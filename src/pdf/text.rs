@@ -1,8 +1,6 @@
 use either::Either;
-use geo::{Euclidean, Rect};
+use geo::{BoundingRect, MultiPolygon, Rect};
 use lopdf::{content::Operation, Document, Object};
-use rayon::prelude::*;
-use std::{collections::LinkedList, sync::Mutex};
 use tracing::{debug, trace};
 
 /// pdf의 TJ operator에서 문자열을 추출한다.
@@ -172,16 +170,36 @@ pub(crate) fn operator_to_chars(
 pub(crate) fn detect_strings(mut cs: Vec<PdfChar>) -> Vec<PdfString> {
     cs.iter_mut().for_each(PdfChar::make_ready);
     let nearby = |s: &PdfString, c: &PdfChar| {
-        todo!("s와 c가 가깝게 있는지 확인");
-        true
+        let s = s.rect();
+        let c = c.rect;
+        let x_distance = (s.center().x - c.center().x).abs();
+        let y_distance = (s.center().y - c.center().y).abs();
+        (s.width() + c.width()) / 2.0 + 20.0 >= x_distance && s.height() * 1.0 / 3.0 >= y_distance
     };
     let mut result = Vec::new();
     while let Some(c) = cs.pop() {
-        let Some(mut s) = result.iter().find(|s| nearby(s, &c)) else {
+        let Some(s) = result.iter_mut().find(|s| nearby(s, &c)) else {
             result.push(PdfString([c].into()));
             continue;
         };
-        todo!("앞에 있는지, 뒤에 있는지 등을 판단해서 배치. 위 아래 있는지 판단해서 제곱 기호나 여러 기호로 변경");
+        let position =
+            s.0.iter()
+                .position(|sc| sc.rect.center().x > c.rect.center().x);
+        if let Some(position) = position {
+            if let Some(before_y) = s.0.get(position - 1).map(|before| before.rect.center().y) {
+                if before_y + 10.0 < c.rect.center().y {
+                    todo!("represent as 특수문자로 변경");
+                }
+            }
+            s.0.insert(position, c);
+        } else {
+            if let Some(before_y) = s.0.last().map(|before| before.rect.center().y) {
+                if before_y + 10.0 < c.rect.center().y {
+                    todo!("represent as 특수문자로 변경");
+                }
+            }
+            s.0.push(c);
+        }
     }
     result
 }
@@ -195,40 +213,14 @@ impl PdfString {
         if self.0.is_empty() {
             panic!("no rect")
         }
-        let mut right = f32::NAN;
-        let mut top = f32::NAN;
-        let mut left = f32::NAN;
-        let mut bottom = f32::NAN;
+        let mut polygons = Vec::new();
         for c in &self.0 {
             let rect = c.rect;
-            let (char_right, char_top) = rect.max().x_y();
-            let (char_left, char_bottom) = rect.min().x_y();
-            if right.is_nan() {
-                right = char_right;
-            }
-            if top.is_nan() {
-                top = char_top;
-            }
-            if left.is_nan() {
-                left = char_left;
-            }
-            if bottom.is_nan() {
-                bottom = char_bottom;
-            }
-            if char_right > right {
-                right = char_right;
-            }
-            if char_top > top {
-                top = char_top;
-            }
-            if char_left < left {
-                left = char_left;
-            }
-            if char_bottom < bottom {
-                bottom = char_bottom;
-            }
+            let polygon = rect.to_polygon();
+            polygons.push(polygon);
         }
-        Rect::new([left, bottom], [right, top])
+        let multipolygon = MultiPolygon::new(polygons);
+        multipolygon.bounding_rect().unwrap()
     }
 }
 pub(crate) struct PdfChar {
