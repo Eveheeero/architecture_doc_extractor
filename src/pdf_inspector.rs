@@ -1,4 +1,4 @@
-use crate::pdf::PDF_TEXT_HEIGHT_FACTOR;
+use crate::pdf::v1::PDF_TEXT_HEIGHT_FACTOR;
 use ab_glyph::Font;
 use eframe::egui::{self, FontId, RichText};
 use lopdf::Object;
@@ -337,13 +337,14 @@ fn extract_page(
     ctx: &egui::Context,
     font: &ab_glyph::FontArc,
 ) -> (Vec<InspectorText>, Vec<(egui::Rect, egui::Color32)>) {
-    let box_list = Vec::new();
+    let mut box_list = Vec::new();
     let mut text_list = Vec::new();
 
     let operations: Vec<lopdf::content::Operation> = page.operations;
     let mut pointer = (0.0, 0.0);
     let mut text_width = 0.0;
     let mut text_height = 0.0;
+    let mut rect = egui::Rect::ZERO;
     for operation in operations {
         let operator = operation.operator;
         let operands = operation.operands;
@@ -410,6 +411,19 @@ fn extract_page(
                         _ => {}
                     }
                 }
+            }
+            "f" | "F" => {
+                box_list.push((rect, rand_color()));
+            }
+            "re" => {
+                let x = num(&operands[0]);
+                let y = num(&operands[1]);
+                let w = num(&operands[2]);
+                let h = num(&operands[3]);
+                rect = egui::Rect {
+                    min: [x, y].into(),
+                    max: [x + w, y + h].into(),
+                };
             }
             _ => {}
         }
