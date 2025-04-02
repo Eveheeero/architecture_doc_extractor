@@ -238,11 +238,6 @@ impl PdfChar {
         self.represent_as.as_ref().expect("make_ready not called")
     }
 }
-pub(crate) struct PdfBoxes(Vec<PdfBox>);
-pub(crate) struct PdfBox {
-    id: usize,
-    rect: Rect<f32>,
-}
 
 pub(crate) fn operator_to_boxes(data: impl IntoIterator<Item = Operation>) -> PdfBoxes {
     let mut result = Vec::new();
@@ -272,4 +267,31 @@ pub(crate) fn operator_to_boxes(data: impl IntoIterator<Item = Operation>) -> Pd
     }
 
     PdfBoxes(result)
+}
+
+pub(crate) struct PdfBoxes(Vec<PdfBox>);
+pub(crate) struct PdfBox {
+    id: usize,
+    rect: Rect<f32>,
+}
+
+impl PdfBoxes {
+    /// 주어진 rect가 어떤 셀에 속하는지 연산 후 반환
+    pub(crate) fn get_cell_boxes(&self, rect: Rect<f32>) -> Option<Rect<f32>> {
+        let zero = Rect::new([0.0, 0.0], [0.0, 0.0]);
+        let mut left_closer = zero;
+        let mut right_closer = zero;
+        let mut top_closer = zero;
+        let mut bottom_closer = zero;
+        todo!();
+
+        if left_closer == zero
+            || right_closer == zero
+            || top_closer == zero
+            || bottom_closer == zero
+        {
+            return None;
+        }
+        todo!()
+    }
 }
