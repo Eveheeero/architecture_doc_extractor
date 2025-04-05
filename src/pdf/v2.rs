@@ -281,7 +281,7 @@ impl PdfBoxes {
     const Y_INF: [f32; 2] = [0.0, f32::INFINITY];
     const Y_NEGINF: [f32; 2] = [0.0, f32::NEG_INFINITY];
     /// 주어진 rect가 어떤 셀에 속하는지 연산 후 반환
-    pub(crate) fn get_cell_boxes(&self, rect: Rect<f32>) -> Option<Rect<f32>> {
+    pub(crate) fn get_surrounding_rect(&self, rect: Rect<f32>) -> Option<Rect<f32>> {
         let mut left_closer = Rect::new(Self::X_NEGINF, Self::X_NEGINF);
         let mut right_closer = Rect::new(Self::X_INF, Self::X_INF);
         let mut top_closer = Rect::new(Self::Y_INF, Self::Y_INF);
@@ -290,8 +290,20 @@ impl PdfBoxes {
         for r#box in self.0.iter() {
             let r = r#box.rect;
             // top
-            if r.min().y >= rect.max().y && top_closer.min().y < r.min().y {
+            if r.min().y >= rect.max().y && top_closer.min().y > r.max().y {
                 top_closer = r;
+            }
+            // bottom
+            if r.max().y <= rect.min().y && bottom_closer.max().y < r.min().y {
+                bottom_closer = r;
+            }
+            // left
+            if r.max().x <= rect.min().x && left_closer.max().x < r.min().x {
+                left_closer = r;
+            }
+            // right
+            if r.min().x >= rect.max().x && right_closer.min().x > r.max().x {
+                right_closer = r;
             }
         }
 
@@ -302,7 +314,7 @@ impl PdfBoxes {
         {
             return None;
         }
-        let left_top = [left_closer.max().x, top_closer.min().x];
+        let left_top = [left_closer.max().x, top_closer.min().y];
         let right_bottom = [right_closer.min().x, bottom_closer.max().y];
         Some(Rect::new(left_top, right_bottom))
     }
