@@ -276,22 +276,34 @@ pub(crate) struct PdfBox {
 }
 
 impl PdfBoxes {
+    const X_NEGINF: [f32; 2] = [f32::NEG_INFINITY, 0.0];
+    const X_INF: [f32; 2] = [f32::INFINITY, 0.0];
+    const Y_INF: [f32; 2] = [0.0, f32::INFINITY];
+    const Y_NEGINF: [f32; 2] = [0.0, f32::NEG_INFINITY];
     /// 주어진 rect가 어떤 셀에 속하는지 연산 후 반환
     pub(crate) fn get_cell_boxes(&self, rect: Rect<f32>) -> Option<Rect<f32>> {
-        let zero = Rect::new([0.0, 0.0], [0.0, 0.0]);
-        let mut left_closer = zero;
-        let mut right_closer = zero;
-        let mut top_closer = zero;
-        let mut bottom_closer = zero;
-        todo!();
+        let mut left_closer = Rect::new(Self::X_NEGINF, Self::X_NEGINF);
+        let mut right_closer = Rect::new(Self::X_INF, Self::X_INF);
+        let mut top_closer = Rect::new(Self::Y_INF, Self::Y_INF);
+        let mut bottom_closer = Rect::new(Self::Y_NEGINF, Self::Y_NEGINF);
 
-        if left_closer == zero
-            || right_closer == zero
-            || top_closer == zero
-            || bottom_closer == zero
+        for r#box in self.0.iter() {
+            let r = r#box.rect;
+            // top
+            if r.min().y >= rect.max().y && top_closer.min().y < r.min().y {
+                top_closer = r;
+            }
+        }
+
+        if left_closer == Rect::new(Self::X_NEGINF, Self::X_NEGINF)
+            || right_closer == Rect::new(Self::X_INF, Self::X_INF)
+            || top_closer == Rect::new(Self::Y_INF, Self::Y_INF)
+            || bottom_closer == Rect::new(Self::Y_NEGINF, Self::Y_NEGINF)
         {
             return None;
         }
-        todo!()
+        let left_top = [left_closer.max().x, top_closer.min().x];
+        let right_bottom = [right_closer.min().x, bottom_closer.max().y];
+        Some(Rect::new(left_top, right_bottom))
     }
 }
