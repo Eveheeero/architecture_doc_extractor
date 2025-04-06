@@ -318,4 +318,41 @@ impl PdfBoxes {
         let right_bottom = [right_closer.min().x, bottom_closer.max().y];
         Some(Rect::new(left_top, right_bottom))
     }
+    pub(crate) fn prepare_cells(&self) -> Vec<Rect<f32>> {
+        let mut result = Vec::new();
+
+        let mut horizontal_lines = self
+            .0
+            .iter()
+            .filter(|x| x.rect.width() > x.rect.height())
+            .map(|x| x.rect)
+            .collect::<Vec<_>>();
+        horizontal_lines.sort_by(|a, b| a.min().y.partial_cmp(&b.min().y).unwrap());
+        let mut vertical_lines = self
+            .0
+            .iter()
+            .filter(|x| x.rect.height() > x.rect.width())
+            .map(|x| x.rect)
+            .collect::<Vec<_>>();
+        vertical_lines.sort_by(|a, b| a.min().x.partial_cmp(&b.min().x).unwrap());
+
+        for top in horizontal_lines {
+            let mut bottom_closer: Option<Rect<f32>> = None;
+            let mut left_closer: Option<Rect<f32>> = None;
+            let mut right_closer: Option<Rect<f32>> = None;
+
+            todo!();
+
+            if bottom_closer.is_some() && left_closer.is_some() && right_closer.is_some() {
+                let left_top = [left_closer.unwrap().max().x, top.min().y];
+                let right_bottom = [
+                    right_closer.unwrap().min().x,
+                    bottom_closer.unwrap().max().y,
+                ];
+                result.push(Rect::new(left_top, right_bottom));
+            }
+        }
+
+        result
+    }
 }
