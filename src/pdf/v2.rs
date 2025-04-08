@@ -336,12 +336,19 @@ impl PdfBoxes {
             .collect::<Vec<_>>();
         vertical_lines.sort_by(|a, b| a.min().x.partial_cmp(&b.min().x).unwrap());
 
-        for top in horizontal_lines {
+        for top in &horizontal_lines {
             let mut bottom_closer: Option<Rect<f32>> = None;
             let mut left_closer: Option<Rect<f32>> = None;
             let mut right_closer: Option<Rect<f32>> = None;
 
-            todo!();
+            let mut bottoms = horizontal_lines
+                .iter()
+                .filter(|x| x.max().y < top.min().y)
+                .collect::<Vec<_>>();
+            bottoms.sort_by(|a, b| a.max().y.partial_cmp(&b.max().y).unwrap().reverse());
+            for bottom in bottoms {
+                todo!("bottom의 좌측 및 우측에 해당하는 verticla lines가 있는지 확인 후 break");
+            }
 
             if bottom_closer.is_some() && left_closer.is_some() && right_closer.is_some() {
                 let left_top = [left_closer.unwrap().max().x, top.min().y];
