@@ -290,6 +290,10 @@ impl PdfBoxes {
     }
     /// 주어진 lines로 어떤 셀이 만들어졌는지 연산
     pub(crate) fn prepare_cells(&mut self) {
+        if self.cells.is_some() {
+            return;
+        }
+
         let mut result = Vec::new();
 
         let mut horizontal_lines = self
