@@ -380,3 +380,40 @@ impl PdfBoxes {
         result
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use geo::Rect;
+    use lopdf::content::Operation;
+    use lopdf::Object;
+    fn make_box(x: f32, y: f32, w: f32, h: f32) -> Vec<Object> {
+        [
+            Object::Real(x),
+            Object::Real(y),
+            Object::Real(w),
+            Object::Real(h),
+        ]
+        .into()
+    }
+
+    #[test]
+    fn test_prepare_cells() {
+        let ops = vec![
+            Operation::new("re", make_box(0.0, 100.0, 100.0, 0.0)),
+            Operation::new("f", [].into()),
+            Operation::new("re", make_box(0.0, 50.0, 100.0, 0.0)),
+            Operation::new("f", [].into()),
+            Operation::new("re", make_box(0.0, 50.0, 0.0, 50.0)),
+            Operation::new("f", [].into()),
+            Operation::new("re", make_box(100.0, 50.0, 0.0, 50.0)),
+            Operation::new("f", [].into()),
+        ];
+        let boxes = operator_to_boxes(ops);
+        let cells = boxes.prepare_cells();
+        assert_eq!(cells.len(), 1);
+        let cell = cells[0];
+        let expected = Rect::new([0.0, 50.0], [100.0, 100.0]);
+        assert_eq!(cell, expected);
+    }
+}
