@@ -341,13 +341,30 @@ impl PdfBoxes {
             let mut left_closer: Option<Rect<f32>> = None;
             let mut right_closer: Option<Rect<f32>> = None;
 
+            // top 아래에 있는 수평선(bottom)들 중 가장 가까운 선부터 순회
             let mut bottoms = horizontal_lines
                 .iter()
                 .filter(|x| x.max().y < top.min().y)
                 .collect::<Vec<_>>();
             bottoms.sort_by(|a, b| a.max().y.partial_cmp(&b.max().y).unwrap().reverse());
             for bottom in bottoms {
-                todo!("bottom의 좌측 및 우측에 해당하는 verticla lines가 있는지 확인 후 break");
+                // cell 영역의 x 범위 (top과 bottom의 교집합)
+                let min_x = top.min().x.max(bottom.min().x);
+                let max_x = top.max().x.min(bottom.max().x);
+                // Y 범위를 가로지르는 수직선 후보 및 x 겹침 필터
+                let mut vs = vertical_lines
+                    .iter()
+                    .filter(|v| v.max().y >= top.min().y || v.min().y <= bottom.max().y)
+                    .filter(|v| v.max().x >= min_x && v.min().x <= max_x)
+                    .collect::<Vec<_>>();
+                // 후보선 2개 이상일 때 좌우 경계 설정
+                if vs.len() >= 2 {
+                    vs.sort_by(|a, b| a.min().x.partial_cmp(&b.min().x).unwrap());
+                    left_closer = Some(**vs.first().unwrap());
+                    right_closer = Some(**vs.last().unwrap());
+                    bottom_closer = Some(*bottom);
+                    break;
+                }
             }
 
             if bottom_closer.is_some() && left_closer.is_some() && right_closer.is_some() {
