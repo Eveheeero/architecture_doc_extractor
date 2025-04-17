@@ -325,7 +325,7 @@ impl PdfBoxes {
                 // Y 범위를 가로지르는 수직선 후보 및 x 겹침 필터
                 let mut vs = vertical_lines
                     .iter()
-                    .filter(|v| v.max().y >= top.min().y || v.min().y <= bottom.max().y)
+                    .filter(|v| v.max().y >= top.min().y && v.min().y <= bottom.max().y)
                     .filter(|v| v.max().x >= min_x && v.min().x <= max_x)
                     .collect::<Vec<_>>();
                 // 후보선 2개 이상일 때 좌우 경계 설정
