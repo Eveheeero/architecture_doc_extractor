@@ -266,70 +266,41 @@ pub(crate) fn operator_to_boxes(data: impl IntoIterator<Item = Operation>) -> Pd
         }
     }
 
-    PdfBoxes(result)
+    PdfBoxes {
+        lines: result,
+        cells: None,
+    }
 }
 
-pub(crate) struct PdfBoxes(Vec<PdfBox>);
+pub(crate) struct PdfBoxes {
+    lines: Vec<PdfBox>,
+    cells: Option<Vec<Rect<f32>>>,
+}
 pub(crate) struct PdfBox {
     id: usize,
     rect: Rect<f32>,
 }
 
 impl PdfBoxes {
-    const X_NEGINF: [f32; 2] = [f32::NEG_INFINITY, 0.0];
-    const X_INF: [f32; 2] = [f32::INFINITY, 0.0];
-    const Y_INF: [f32; 2] = [0.0, f32::INFINITY];
-    const Y_NEGINF: [f32; 2] = [0.0, f32::NEG_INFINITY];
-    /// 주어진 rect가 어떤 셀에 속하는지 연산 후 반환
-    pub(crate) fn get_surrounding_rect(&self, rect: Rect<f32>) -> Option<Rect<f32>> {
-        let mut left_closer = Rect::new(Self::X_NEGINF, Self::X_NEGINF);
-        let mut right_closer = Rect::new(Self::X_INF, Self::X_INF);
-        let mut top_closer = Rect::new(Self::Y_INF, Self::Y_INF);
-        let mut bottom_closer = Rect::new(Self::Y_NEGINF, Self::Y_NEGINF);
-
-        for r#box in self.0.iter() {
-            let r = r#box.rect;
-            // top
-            if r.min().y >= rect.max().y && top_closer.min().y > r.max().y {
-                top_closer = r;
-            }
-            // bottom
-            if r.max().y <= rect.min().y && bottom_closer.max().y < r.min().y {
-                bottom_closer = r;
-            }
-            // left
-            if r.max().x <= rect.min().x && left_closer.max().x < r.min().x {
-                left_closer = r;
-            }
-            // right
-            if r.min().x >= rect.max().x && right_closer.min().x > r.max().x {
-                right_closer = r;
-            }
-        }
-
-        if left_closer == Rect::new(Self::X_NEGINF, Self::X_NEGINF)
-            || right_closer == Rect::new(Self::X_INF, Self::X_INF)
-            || top_closer == Rect::new(Self::Y_INF, Self::Y_INF)
-            || bottom_closer == Rect::new(Self::Y_NEGINF, Self::Y_NEGINF)
-        {
-            return None;
-        }
-        let left_top = [left_closer.max().x, top_closer.min().y];
-        let right_bottom = [right_closer.min().x, bottom_closer.max().y];
-        Some(Rect::new(left_top, right_bottom))
+    pub(crate) fn get_lines(&self) -> &Vec<PdfBox> {
+        &self.lines
     }
-    pub(crate) fn prepare_cells(&self) -> Vec<Rect<f32>> {
+    pub(crate) fn get_cells(&self) -> &Vec<Rect<f32>> {
+        self.cells.as_ref().unwrap()
+    }
+    /// 주어진 lines로 어떤 셀이 만들어졌는지 연산
+    pub(crate) fn prepare_cells(&mut self) {
         let mut result = Vec::new();
 
         let mut horizontal_lines = self
-            .0
+            .lines
             .iter()
             .filter(|x| x.rect.width() > x.rect.height())
             .map(|x| x.rect)
             .collect::<Vec<_>>();
         horizontal_lines.sort_by(|a, b| a.min().y.partial_cmp(&b.min().y).unwrap());
         let mut vertical_lines = self
-            .0
+            .lines
             .iter()
             .filter(|x| x.rect.height() > x.rect.width())
             .map(|x| x.rect)
@@ -377,7 +348,7 @@ impl PdfBoxes {
             }
         }
 
-        result
+        self.cells = Some(result);
     }
 }
 
@@ -387,7 +358,21 @@ mod tests {
     use geo::Rect;
     use lopdf::content::Operation;
     use lopdf::Object;
-    fn make_box(x: f32, y: f32, w: f32, h: f32) -> Vec<Object> {
+    /// x y w h
+    fn generate_cells(lines: &[[f32; 4]]) -> Vec<Rect<f32>> {
+        let mut ops = Vec::new();
+        for line in lines {
+            ops.push(Operation::new(
+                "re",
+                make_line(line[0], line[1], line[2], line[3]),
+            ));
+            ops.push(Operation::new("f", [].into()));
+        }
+        let mut boxes = operator_to_boxes(ops);
+        boxes.prepare_cells();
+        boxes.get_cells().clone()
+    }
+    fn make_line(x: f32, y: f32, w: f32, h: f32) -> Vec<Object> {
         [
             Object::Real(x),
             Object::Real(y),
@@ -398,22 +383,69 @@ mod tests {
     }
 
     #[test]
-    fn test_prepare_cells() {
-        let ops = vec![
-            Operation::new("re", make_box(0.0, 100.0, 100.0, 0.0)),
-            Operation::new("f", [].into()),
-            Operation::new("re", make_box(0.0, 50.0, 100.0, 0.0)),
-            Operation::new("f", [].into()),
-            Operation::new("re", make_box(0.0, 50.0, 0.0, 50.0)),
-            Operation::new("f", [].into()),
-            Operation::new("re", make_box(100.0, 50.0, 0.0, 50.0)),
-            Operation::new("f", [].into()),
-        ];
-        let boxes = operator_to_boxes(ops);
-        let cells = boxes.prepare_cells();
+    fn test_prepare_cells_fit() {
+        let cells = generate_cells(&[
+            [0.0, 100.0, 100.0, 0.0],
+            [0.0, 50.0, 100.0, 0.0],
+            [0.0, 50.0, 0.0, 50.0],
+            [100.0, 50.0, 0.0, 50.0],
+        ]);
         assert_eq!(cells.len(), 1);
         let cell = cells[0];
         let expected = Rect::new([0.0, 50.0], [100.0, 100.0]);
         assert_eq!(cell, expected);
+    }
+    #[test]
+    fn test_prepare_cells_thick_line() {
+        let cells = generate_cells(&[
+            [5.0, 100.0, 95.0, 3.0],
+            [5.0, 50.0, 95.0, 4.0],
+            [0.0, 54.0, 5.0, 46.0],
+            [100.0, 54.0, 6.0, 46.0],
+        ]);
+        assert_eq!(cells.len(), 1);
+        let cell = cells[0];
+        let expected = Rect::new([5.0, 54.0], [100.0, 100.0]);
+        assert_eq!(cell, expected);
+    }
+    #[test]
+    fn test_prepare_cells_x_unfit_1() {
+        let cells = generate_cells(&[
+            [5.0, 100.0, 94.9, 3.0], // changed
+            [5.0, 50.0, 95.0, 4.0],
+            [0.0, 54.0, 5.0, 46.0],
+            [100.0, 54.0, 6.0, 46.0],
+        ]);
+        assert!(cells.is_empty());
+    }
+    #[test]
+    fn test_prepare_cells_x_unfit_2() {
+        let cells = generate_cells(&[
+            [5.0, 100.0, 95.0, 3.0],
+            [5.1, 50.0, 94.9, 4.0], // changed
+            [0.0, 54.0, 5.0, 46.0],
+            [100.0, 54.0, 6.0, 46.0],
+        ]);
+        assert!(cells.is_empty());
+    }
+    #[test]
+    fn test_prepare_cells_y_unfit_1() {
+        let cells = generate_cells(&[
+            [5.0, 100.0, 95.0, 3.0],
+            [5.0, 50.0, 95.0, 4.0],
+            [0.0, 54.0, 5.0, 46.0],
+            [100.0, 54.1, 6.0, 46.0], // changed, right line move a bit higher
+        ]);
+        assert!(cells.is_empty());
+    }
+    #[test]
+    fn test_prepare_cells_y_unfit_2() {
+        let cells = generate_cells(&[
+            [5.0, 100.0, 95.0, 3.0],
+            [5.0, 50.0, 95.0, 4.0],
+            [0.0, 54.0, 5.0, 45.9], // changed
+            [100.0, 54.0, 6.0, 46.0],
+        ]);
+        assert!(cells.is_empty());
     }
 }
