@@ -34,7 +34,10 @@ pub(crate) fn extract_tj<'obj>(
             }
         }
         Object::Array(o) => Box::new(o.iter().map(|o| extract_tj(doc, o)).flatten()),
-        _ => unreachable!(),
+        _ => {
+            dbg!(&obj);
+            unreachable!()
+        }
     }
 }
 
@@ -59,7 +62,7 @@ pub(crate) fn operator_to_texts(
         .filter(|op| {
             matches!(
                 op.operator.as_str(),
-                "Tj" | "TJ" | "TD" | "Td" | "Tm" | "Tlm" | "T*" | "Tc" | "Tw" | "Tf" | "Tfs"
+                "Tj" | "TJ" | "TD" | "Td" | "Tm" | "Tlm" | "T*" /* | "Tc" | "Tw" | "Tf" | "Tfs" */
             )
         })
         .filter_map(|op| {
