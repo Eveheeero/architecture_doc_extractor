@@ -32,7 +32,7 @@ fn print_page_contents() {
 }
 
 #[test]
-fn extract_page_texts() {
+fn extract_page_texts_v1() {
     crate::setup_logger();
     let doc = get_pdf();
     let texts = crate::pdf::page_to_texts_v1(&doc, 129);
@@ -55,4 +55,17 @@ fn char_width() {
     let tt4 = tt4.unwrap();
     assert_eq!(tt4.get_char_width(' '), 0.247);
     assert_eq!(tt4.get_char_width('!'), 0.194);
+}
+
+#[test]
+fn extract_page_texts_v2() {
+    crate::setup_logger();
+    let doc = get_pdf();
+    let limit = 50;
+    for page in (129..734).take(limit) {
+        let _texts = crate::pdf::page_to_texts_v2(&doc, page);
+        let mut boxes = crate::pdf::page_to_boxes_v2(&doc, page);
+        boxes.prepare_cells();
+    }
+    assert!(true);
 }
