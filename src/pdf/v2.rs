@@ -241,11 +241,6 @@ impl PdfChar {
 
 pub(crate) fn operator_to_boxes(data: impl IntoIterator<Item = Operation>) -> PdfBoxes {
     let mut result = Vec::new();
-    let n = |o: &Object| match o {
-        Object::Integer(i) => *i as f32,
-        Object::Real(i) => *i,
-        _ => panic!("{:?}", o),
-    };
 
     let mut rect = Rect::new([0.0, 0.0], [0.0, 0.0]);
     for op in data.into_iter() {
@@ -257,7 +252,7 @@ pub(crate) fn operator_to_boxes(data: impl IntoIterator<Item = Operation>) -> Pd
                 });
             }
             "re" => {
-                let [x, y, w, h] = op.operands.iter().map(|o| n(o)).collect::<Vec<_>>()[..] else {
+                let [x, y, w, h] = op.operands.iter().map(|o| extract_num(o)).collect::<Vec<_>>()[..] else {
                     panic!()
                 };
                 rect = Rect::new([x, y], [x + w, y + h]);

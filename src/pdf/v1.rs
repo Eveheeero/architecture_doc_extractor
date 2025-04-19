@@ -41,11 +41,12 @@ pub(crate) fn extract_tj<'obj>(
     }
 }
 
+#[inline]
 pub(super) fn extract_num(obj: &Object) -> f32 {
     match obj {
         Object::Integer(o) => *o as f32,
         Object::Real(o) => *o,
-        _ => unimplemented!(),
+        _ => unimplemented!("{:?}", obj),
     }
 }
 
