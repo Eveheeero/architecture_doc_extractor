@@ -252,14 +252,13 @@ pub fn operator_to_boxes(data: impl IntoIterator<Item = Operation>) -> PdfBoxes 
                 });
             }
             "re" => {
-                let [x, y, w, h] = op
-                    .operands
-                    .iter()
-                    .map(|o| extract_num(o))
-                    .collect::<Vec<_>>()[..]
-                else {
-                    panic!()
-                };
+                assert!(op.operands.len() == 4);
+                let [x, y, w, h] = [
+                    extract_num(&op.operands[0]),
+                    extract_num(&op.operands[1]),
+                    extract_num(&op.operands[2]),
+                    extract_num(&op.operands[3]),
+                ];
                 rect = Rect::new([x, y], [x + w, y + h]);
             }
             _ => {}
@@ -272,10 +271,14 @@ pub fn operator_to_boxes(data: impl IntoIterator<Item = Operation>) -> PdfBoxes 
     }
 }
 
+#[derive(Debug, Clone)]
+
 pub struct PdfBoxes {
     lines: Vec<PdfBox>,
     cells: Option<Vec<Rect<f32>>>,
 }
+
+#[derive(Debug, Clone)]
 pub struct PdfBox {
     id: usize,
     rect: Rect<f32>,
