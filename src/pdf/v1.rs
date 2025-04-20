@@ -4,16 +4,16 @@ use lopdf::{content::Operation, Document, Object};
 use tracing::trace;
 
 /// line factor, if error, change to 1.4
-pub(crate) const PDF_TEXT_HEIGHT_FACTOR: f32 = 1.35;
+pub const PDF_TEXT_HEIGHT_FACTOR: f32 = 1.35;
 /// width factor
 /// text's width is (length * width * width factor)
 /// text(x:72, length:18, width:9) ends at x: 142
 /// text(x:80, length:12, width:9) ends at x: 134
-pub(crate) const PDF_TEXT_WIDTH_FACTOR: f32 = 0.43;
+pub const PDF_TEXT_WIDTH_FACTOR: f32 = 0.43;
 
 /// pdf의 TJ operator에서 문자열을 추출한다.
 /// TJ ex -> ["abc", 3(공백사이즈), "def"] -> "abc    def"
-pub(crate) fn extract_tj<'obj>(
+pub fn extract_tj<'obj>(
     doc: &'obj Document,
     obj: &'obj Object,
 ) -> Box<dyn Iterator<Item = u8> + 'obj> {
@@ -51,10 +51,7 @@ pub(super) fn extract_num(obj: &Object) -> f32 {
 }
 
 /// pdf 페이지 내부 정렬 순서에 따라 텍스트 파싱
-pub(crate) fn operator_to_texts(
-    doc: &Document,
-    data: impl IntoIterator<Item = Operation>,
-) -> Vec<String> {
+pub fn operator_to_texts(doc: &Document, data: impl IntoIterator<Item = Operation>) -> Vec<String> {
     let mut last_position = (0.0, 0.0);
     let mut text_height = 0.0;
     let mut text_width = 0.0;
@@ -227,7 +224,7 @@ fn extend_nearby_texts(mut d: Vec<PdfInnerText>) -> Vec<PdfInnerText> {
 
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
-pub(crate) struct PdfInnerText {
+pub struct PdfInnerText {
     id: usize,
     text: String,
     /// (x, height) left bottom corner
@@ -236,13 +233,13 @@ pub(crate) struct PdfInnerText {
     text_height: f32,
 }
 impl PdfInnerText {
-    pub(crate) fn get_text(&self) -> &str {
+    pub fn get_text(&self) -> &str {
         &self.text
     }
-    pub(crate) fn is_higher_than(&self, other: &Self) -> bool {
+    pub fn is_higher_than(&self, other: &Self) -> bool {
         self.start_position.1 > other.start_position.1
     }
-    pub(crate) fn is_same_line(&self, other: &Self) -> bool {
+    pub fn is_same_line(&self, other: &Self) -> bool {
         if self.start_position.1 == other.start_position.1 {
             return true;
         }
@@ -254,10 +251,10 @@ impl PdfInnerText {
         /* multiple 2/3 to prevent total ordering error by exponent of a log function */
         higher.start_position.1 <= lower.start_position.1 + lower.text_height * 2.0 / 3.0
     }
-    pub(crate) fn get_x_position(&self) -> f32 {
+    pub fn get_x_position(&self) -> f32 {
         self.start_position.0
     }
-    pub(crate) fn is_x_nearby(&self, other: &Self) -> bool {
+    pub fn is_x_nearby(&self, other: &Self) -> bool {
         const X_NEARBY_THRESHOLD: f32 = 10.0;
         let (left, right) = if self.start_position.0 <= other.start_position.0 {
             (self, other)
@@ -268,7 +265,7 @@ impl PdfInnerText {
             + left.text.len() as f32 * left.text_width * PDF_TEXT_WIDTH_FACTOR;
         right.start_position.0 <= left_object_right_side + X_NEARBY_THRESHOLD
     }
-    pub(crate) fn get_debug_string(&self) -> String {
+    pub fn get_debug_string(&self) -> String {
         format!(
             "[{}({}):{}({})] {}",
             self.start_position.0,

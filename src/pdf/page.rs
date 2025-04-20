@@ -3,12 +3,12 @@
 use lopdf::{content::Content, Document};
 use tracing::debug;
 
-pub(crate) fn page_to_texts_v1(doc: &Document, page: u32) -> Vec<String> {
+pub fn page_to_texts_v1(doc: &Document, page: u32) -> Vec<String> {
     debug!("{}페이지 텍스트 추출중", page);
     crate::pdf::v1::operator_to_texts(doc, get_page_contents(doc, page).operations)
 }
 
-pub(crate) fn page_to_texts_v2(doc: &Document, page: u32) -> Vec<crate::pdf::v2::PdfString> {
+pub fn page_to_texts_v2(doc: &Document, page: u32) -> Vec<crate::pdf::v2::PdfString> {
     debug!("{}페이지 텍스트 추출중", page);
     let chars = crate::pdf::v2::operator_to_chars(
         crate::pdf::get_pdf_fonts(doc, page),
@@ -18,12 +18,12 @@ pub(crate) fn page_to_texts_v2(doc: &Document, page: u32) -> Vec<crate::pdf::v2:
     crate::pdf::v2::sort_strings(&mut strings);
     strings
 }
-pub(crate) fn page_to_boxes_v2(doc: &Document, page: u32) -> crate::pdf::v2::PdfBoxes {
+pub fn page_to_boxes_v2(doc: &Document, page: u32) -> crate::pdf::v2::PdfBoxes {
     debug!("{}페이지 라인 추출중", page);
     crate::pdf::v2::operator_to_boxes(get_page_contents(doc, page).operations)
 }
 
-pub(crate) fn get_page_contents(doc: &Document, page: u32) -> Content {
+pub fn get_page_contents(doc: &Document, page: u32) -> Content {
     let binding = doc.get_pages();
     let page = binding.get(&page).unwrap();
     let page = doc.get_object(*page).unwrap();
@@ -36,7 +36,7 @@ pub(crate) fn get_page_contents(doc: &Document, page: u32) -> Content {
     Content::decode(&page_items.decompressed_content().unwrap()).unwrap()
 }
 
-pub(crate) fn get_page_contents2(doc: &Document, page: u32) -> Content {
+pub fn get_page_contents2(doc: &Document, page: u32) -> Content {
     let pages = doc.get_pages();
     let page = pages.get(&page).unwrap();
     let page_contents = doc.get_page_contents(*page);
@@ -48,7 +48,7 @@ pub(crate) fn get_page_contents2(doc: &Document, page: u32) -> Content {
     Content::decode(&page_contents.decompressed_content().unwrap()).unwrap()
 }
 
-pub(crate) fn get_page_resources(doc: &Document, page: u32) -> &lopdf::Dictionary {
+pub fn get_page_resources(doc: &Document, page: u32) -> &lopdf::Dictionary {
     let pages = doc.get_pages();
     let page = pages.get(&page).unwrap();
     let page = doc.get_object(*page).unwrap();
@@ -57,12 +57,7 @@ pub(crate) fn get_page_resources(doc: &Document, page: u32) -> &lopdf::Dictionar
     doc.dereference(resources).unwrap().1.as_dict().unwrap()
 }
 
-pub(crate) fn get_char_width(
-    doc: &Document,
-    page: u32,
-    font_name: impl AsRef<str>,
-    c: char,
-) -> f32 {
+pub fn get_char_width(doc: &Document, page: u32, font_name: impl AsRef<str>, c: char) -> f32 {
     let resources = get_page_resources(doc, page);
     let fonts = resources.get(b"Font").unwrap().as_dict().unwrap();
     let font = fonts.get(font_name.as_ref().as_bytes()).unwrap();
@@ -73,13 +68,13 @@ pub(crate) fn get_char_width(
     widths[index as usize].as_i64().unwrap() as f32 / 1000.0
 }
 
-pub(crate) fn get_pdf_fonts(doc: &Document, page: u32) -> PdfFonts {
+pub fn get_pdf_fonts(doc: &Document, page: u32) -> PdfFonts {
     let resources = get_page_resources(doc, page);
     let fonts = resources.get(b"Font").unwrap().as_dict().unwrap();
     PdfFonts(doc, fonts)
 }
-pub(crate) struct PdfFonts<'pdf>(&'pdf Document, &'pdf lopdf::Dictionary);
-pub(crate) struct PdfFont {
+pub struct PdfFonts<'pdf>(&'pdf Document, &'pdf lopdf::Dictionary);
+pub struct PdfFont {
     first_char: usize,
     widths: Box<[f32]>,
 }
@@ -105,7 +100,7 @@ impl<'pdf> PdfFonts<'pdf> {
     }
 }
 impl PdfFont {
-    pub(crate) fn get_char_width(&self, c: char) -> f32 {
+    pub fn get_char_width(&self, c: char) -> f32 {
         let index = c as usize - self.first_char;
         self.widths[index]
     }

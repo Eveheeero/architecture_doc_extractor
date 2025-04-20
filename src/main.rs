@@ -2,7 +2,7 @@
 
 #[path = "intel/intel.rs"]
 mod intel;
-pub(crate) mod pdf;
+use architecture_doc_extractor::pdf;
 #[cfg(feature = "pdf_inspector")]
 mod pdf_inspector;
 #[cfg(test)]

@@ -5,7 +5,7 @@ use lopdf::{content::Operation, Object};
 use std::cmp::Ordering;
 use tracing::debug;
 
-pub(crate) fn operator_to_chars(
+pub fn operator_to_chars(
     fonts: crate::pdf::PdfFonts,
     data: impl IntoIterator<Item = Operation>,
 ) -> Vec<PdfChar> {
@@ -126,7 +126,7 @@ pub(crate) fn operator_to_chars(
     }
     result
 }
-pub(crate) fn detect_strings(mut cs: Vec<PdfChar>) -> Vec<PdfString> {
+pub fn detect_strings(mut cs: Vec<PdfChar>) -> Vec<PdfString> {
     cs.iter_mut().for_each(PdfChar::make_ready);
     let nearby = |s: &PdfString, c: &PdfChar| {
         let s = s.rect();
@@ -165,7 +165,7 @@ pub(crate) fn detect_strings(mut cs: Vec<PdfChar>) -> Vec<PdfString> {
     result
 }
 
-pub(crate) fn sort_strings(d: &mut Vec<PdfString>) {
+pub fn sort_strings(d: &mut Vec<PdfString>) {
     d.sort_by(|a, b| {
         let height = a
             .rect()
@@ -187,12 +187,12 @@ pub(crate) fn sort_strings(d: &mut Vec<PdfString>) {
     });
 }
 
-pub(crate) struct PdfString(Vec<PdfChar>);
+pub struct PdfString(Vec<PdfChar>);
 impl PdfString {
-    pub(crate) fn get(&self) -> String {
+    pub fn get(&self) -> String {
         self.0.iter().map(PdfChar::get).collect()
     }
-    pub(crate) fn rect(&self) -> Rect<f32> {
+    pub fn rect(&self) -> Rect<f32> {
         if self.0.is_empty() {
             panic!("no rect")
         }
@@ -206,14 +206,14 @@ impl PdfString {
         multipolygon.bounding_rect().unwrap()
     }
 }
-pub(crate) struct PdfChar {
+pub struct PdfChar {
     raw: Either<char, u8>,
     // x, height
     rect: Rect<f32>,
     represent_as: Option<String>,
 }
 impl PdfChar {
-    pub(crate) fn make_ready(&mut self) {
+    pub fn make_ready(&mut self) {
         if self.represent_as.is_some() {
             return;
         }
@@ -234,12 +234,12 @@ impl PdfChar {
         };
         self.represent_as = Some(data);
     }
-    pub(crate) fn get(&self) -> &str {
+    pub fn get(&self) -> &str {
         self.represent_as.as_ref().expect("make_ready not called")
     }
 }
 
-pub(crate) fn operator_to_boxes(data: impl IntoIterator<Item = Operation>) -> PdfBoxes {
+pub fn operator_to_boxes(data: impl IntoIterator<Item = Operation>) -> PdfBoxes {
     let mut result = Vec::new();
 
     let mut rect = Rect::new([0.0, 0.0], [0.0, 0.0]);
@@ -252,7 +252,12 @@ pub(crate) fn operator_to_boxes(data: impl IntoIterator<Item = Operation>) -> Pd
                 });
             }
             "re" => {
-                let [x, y, w, h] = op.operands.iter().map(|o| extract_num(o)).collect::<Vec<_>>()[..] else {
+                let [x, y, w, h] = op
+                    .operands
+                    .iter()
+                    .map(|o| extract_num(o))
+                    .collect::<Vec<_>>()[..]
+                else {
                     panic!()
                 };
                 rect = Rect::new([x, y], [x + w, y + h]);
@@ -267,24 +272,24 @@ pub(crate) fn operator_to_boxes(data: impl IntoIterator<Item = Operation>) -> Pd
     }
 }
 
-pub(crate) struct PdfBoxes {
+pub struct PdfBoxes {
     lines: Vec<PdfBox>,
     cells: Option<Vec<Rect<f32>>>,
 }
-pub(crate) struct PdfBox {
+pub struct PdfBox {
     id: usize,
     rect: Rect<f32>,
 }
 
 impl PdfBoxes {
-    pub(crate) fn get_lines(&self) -> &Vec<PdfBox> {
+    pub fn get_lines(&self) -> &Vec<PdfBox> {
         &self.lines
     }
-    pub(crate) fn get_cells(&self) -> &Vec<Rect<f32>> {
+    pub fn get_cells(&self) -> &Vec<Rect<f32>> {
         self.cells.as_ref().unwrap()
     }
     /// 주어진 lines로 어떤 셀이 만들어졌는지 연산
-    pub(crate) fn prepare_cells(&mut self) {
+    pub fn prepare_cells(&mut self) {
         if self.cells.is_some() {
             return;
         }
