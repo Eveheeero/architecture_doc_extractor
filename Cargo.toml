@@ -11,6 +11,10 @@ path = "src/main.rs"
 name = "architecture_doc_extractor"
 path = "src/lib.rs"
 
+[[bench]]
+name = "v2_bench"
+path = "src/benches/v2_bench.rs"
+
 [dependencies]
 lopdf = "0.33.0"
 rayon = "1.8.0"
