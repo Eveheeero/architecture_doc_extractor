@@ -47,10 +47,12 @@ pub fn operator_to_chars(
                 let mut last_x = pointer.0;
                 for operand in op.operands {
                     match operand {
-                        Object::String(s, m) => {
+                        Object::String(mut s, m) => {
                             if m == lopdf::StringFormat::Hexadecimal {
                                 debug!(?s, "Hex in Tj");
-                                continue;
+                                assert_eq!(s.len(), 2);
+                                assert_eq!(s[0], 0);
+                                s = [s[1]].into();
                             }
                             for c in s {
                                 let width = font.as_ref().unwrap().get_char_width(c)
@@ -79,10 +81,12 @@ pub fn operator_to_chars(
                                         last_x -= i as f32 / 1000.0 * width_factor
                                     }
                                     Object::Real(i) => last_x -= i / 1000.0 * width_factor,
-                                    Object::String(s, m) => {
+                                    Object::String(mut s, m) => {
                                         if m == lopdf::StringFormat::Hexadecimal {
                                             debug!(?s, "Hex in Tj");
-                                            continue;
+                                            assert_eq!(s.len(), 2);
+                                            assert_eq!(s[0], 0);
+                                            s = [s[1]].into();
                                         }
                                         for c in s {
                                             let width = font.as_ref().unwrap().get_char_width(c)
