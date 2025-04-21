@@ -57,7 +57,7 @@ pub fn get_page_resources(doc: &Document, page: u32) -> &lopdf::Dictionary {
     doc.dereference(resources).unwrap().1.as_dict().unwrap()
 }
 
-pub fn get_char_width(doc: &Document, page: u32, font_name: impl AsRef<str>, c: char) -> f32 {
+pub fn get_char_width(doc: &Document, page: u32, font_name: impl AsRef<str>, c: u8) -> f32 {
     let resources = get_page_resources(doc, page);
     let fonts = resources.get(b"Font").unwrap().as_dict().unwrap();
     let font = fonts.get(font_name.as_ref().as_bytes()).unwrap();
@@ -65,7 +65,12 @@ pub fn get_char_width(doc: &Document, page: u32, font_name: impl AsRef<str>, c: 
     let widths = font.get(b"Widths").unwrap().as_array().unwrap();
     let first_char = font.get(b"FirstChar").unwrap().as_i64().unwrap();
     let index = c as i64 - first_char;
-    widths[index as usize].as_i64().unwrap() as f32 / 1000.0
+    widths
+        .get(index as usize)
+        .unwrap_or(&lopdf::Object::Integer(0))
+        .as_i64()
+        .unwrap() as f32
+        / 1000.0
 }
 
 pub fn get_pdf_fonts(doc: &Document, page: u32) -> PdfFonts {
@@ -100,8 +105,8 @@ impl<'pdf> PdfFonts<'pdf> {
     }
 }
 impl PdfFont {
-    pub fn get_char_width(&self, c: char) -> f32 {
+    pub fn get_char_width(&self, c: u8) -> f32 {
         let index = c as usize - self.first_char;
-        self.widths[index]
+        *self.widths.get(index).unwrap_or(&0.0)
     }
 }

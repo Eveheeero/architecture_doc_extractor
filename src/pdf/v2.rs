@@ -1,5 +1,4 @@
 use crate::pdf::v1::{extract_num, PDF_TEXT_HEIGHT_FACTOR};
-use either::Either;
 use geo::{BoundingRect, MultiPolygon, Rect};
 use lopdf::{content::Operation, Object};
 use std::cmp::Ordering;
@@ -53,11 +52,7 @@ pub fn operator_to_chars(
                                 debug!(?s, "Hex in Tj");
                                 continue;
                             }
-                            let s = String::from_utf8_lossy(&s);
-                            for c in s.chars() {
-                                if c == char::REPLACEMENT_CHARACTER {
-                                    continue;
-                                }
+                            for c in s {
                                 let width = font.as_ref().unwrap().get_char_width(c)
                                     * width_factor
                                     * font_scale;
@@ -68,7 +63,7 @@ pub fn operator_to_chars(
                                     [last_x + width, pointer.1 + height],
                                 );
                                 let pdf_char = PdfChar {
-                                    raw: Either::Left(c),
+                                    raw: c,
                                     rect,
                                     represent_as: None,
                                 };
@@ -89,11 +84,7 @@ pub fn operator_to_chars(
                                             debug!(?s, "Hex in Tj");
                                             continue;
                                         }
-                                        let s = String::from_utf8_lossy(&s);
-                                        for c in s.chars() {
-                                            if c == char::REPLACEMENT_CHARACTER {
-                                                continue;
-                                            }
+                                        for c in s {
                                             let width = font.as_ref().unwrap().get_char_width(c)
                                                 * width_factor
                                                 * font_scale;
@@ -104,7 +95,7 @@ pub fn operator_to_chars(
                                                 [last_x + width, pointer.1 + height],
                                             );
                                             let pdf_char = PdfChar {
-                                                raw: Either::Left(c),
+                                                raw: c,
                                                 rect,
                                                 represent_as: None,
                                             };
@@ -208,7 +199,7 @@ impl PdfString {
     }
 }
 pub struct PdfChar {
-    raw: Either<char, u8>,
+    raw: u8,
     // x, height
     rect: Rect<f32>,
     represent_as: Option<String>,
@@ -218,12 +209,8 @@ impl PdfChar {
         if self.represent_as.is_some() {
             return;
         }
-        if self.raw.is_left() {
-            self.represent_as = Some(self.raw.left().unwrap().to_string());
-            return;
-        }
-        let data = self.raw.right().unwrap();
-        let data = match data {
+        let data = match self.raw {
+            0x20..=0x7e => String::from_utf8([self.raw].into()).unwrap(),
             0x92 => '\''.into(),
             0x93 => '\"'.into(),
             0x94 => '\"'.into(),
@@ -231,7 +218,7 @@ impl PdfChar {
             0x96 => '-'.into(),
             0x97 => '-'.into(),
             0x8a => '-'.into(),
-            _ => unimplemented!("{}", data),
+            _ => unimplemented!("{}", self.raw),
         };
         self.represent_as = Some(data);
     }
