@@ -61,11 +61,17 @@ fn char_width() {
 fn extract_page_texts_v2() {
     crate::setup_logger();
     let doc = get_pdf();
-    let limit = 50;
-    for page in (129..734).take(limit) {
-        let _texts = crate::pdf::page_to_texts_v2(&doc, page);
-        let mut boxes = crate::pdf::page_to_boxes_v2(&doc, page);
-        boxes.prepare_cells();
+    let page = 129;
+    let mut boxes = crate::pdf::page_to_boxes_v2(&doc, page);
+    boxes.prepare_cells();
+    let chars = crate::pdf::v2::operator_to_chars(
+        crate::pdf::get_pdf_fonts(doc, page),
+        crate::pdf::get_page_contents(doc, page).operations,
+    );
+    let mut texts = crate::pdf::v2::detect_strings(chars);
+    crate::pdf::v2::sort_strings(&mut texts);
+    for text in texts {
+        println!("{}", text.get());
     }
     assert!(true);
 }
