@@ -216,9 +216,10 @@ impl PdfChar {
             0x4 => '≤'.into(),
             0x5 => '*'.into(),
             0x6 => '∞'.into(),
-            0x7 => "".into(), // UNKNOWN
+            0x7 => 'π'.into(),
             0x8 => 'Š'.into(),
             0x9 => 'ε'.into(),
+            0xa => 'Σ'.into(),
             0x82 => ','.into(),
             0x87 => '⁄'.into(),
             0x91 => '\''.into(),
@@ -232,7 +233,7 @@ impl PdfChar {
             0x99 => '™'.into(),
             0xab => "<<".into(),
             0xae => '®'.into(),
-            0xb1 => "".into(), // UNKNOWN
+            0xb1 => '−'.into(),
             0xb5 => 'μ'.into(),
             _ => unimplemented!("{}", self.raw),
         };
