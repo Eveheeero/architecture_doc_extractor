@@ -211,6 +211,17 @@ impl PdfChar {
         }
         let data = match self.raw {
             0x20..=0x7e => String::from_utf8([self.raw].into()).unwrap(),
+            0x2 => '≠'.into(),
+            0x3 => '≥'.into(),
+            0x4 => '≤'.into(),
+            0x5 => '*'.into(),
+            0x6 => '∞'.into(),
+            0x7 => "".into(), // UNKNOWN
+            0x8 => 'Š'.into(),
+            0x9 => 'ε'.into(),
+            0x82 => ','.into(),
+            0x87 => '⁄'.into(),
+            0x91 => '\''.into(),
             0x92 => '\''.into(),
             0x93 => '\"'.into(),
             0x94 => '\"'.into(),
@@ -218,6 +229,11 @@ impl PdfChar {
             0x96 => '-'.into(),
             0x97 => '-'.into(),
             0x8a => '-'.into(),
+            0x99 => '™'.into(),
+            0xab => "<<".into(),
+            0xae => '®'.into(),
+            0xb1 => "".into(), // UNKNOWN
+            0xb5 => 'μ'.into(),
             _ => unimplemented!("{}", self.raw),
         };
         self.represent_as = Some(data);

@@ -29,11 +29,9 @@ pub(super) fn parse_instructions(mut d: Vec<(Vec<PdfString>, PdfBoxes)>) -> Vec<
             /* 셀 내부에 있으면 옆이나 아래 있는 셀들과 함께 분석 */
 
             /* string 분석 후 섹션 파악 후 정보 설정 */
-
-            println!("{string}");
         }
     }
-    todo!();
+    // todo!();
     result
 }
 
@@ -56,5 +54,6 @@ fn get_instruction_and_summary(sorted_strings: &Vec<PdfString>) -> (String, Stri
         sorted_strings[last_1].get()
     };
     // ANDNPDBitwise Logical AND NOT of Packed Double Precision Floating-Point Values
-    todo!()
+    // todo!()
+    ("".into(), "".into())
 }
