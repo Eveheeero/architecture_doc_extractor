@@ -189,6 +189,7 @@ pub fn sort_strings(d: &mut Vec<PdfString>) {
 
 pub struct PdfString(Vec<PdfChar>);
 impl PdfString {
+    #[inline]
     pub fn get(&self) -> String {
         self.0.iter().map(PdfChar::get).collect()
     }
@@ -234,6 +235,7 @@ impl PdfChar {
         };
         self.represent_as = Some(data);
     }
+    #[inline]
     pub fn get(&self) -> &str {
         self.represent_as.as_ref().expect("make_ready not called")
     }
@@ -356,6 +358,15 @@ impl PdfBoxes {
         }
 
         self.cells = Some(result);
+    }
+    pub fn get_wrapping_cell(&self, rect: &Rect<f32>) -> Option<Rect<f32>> {
+        use geo::Contains;
+        self.cells
+            .as_ref()
+            .unwrap()
+            .iter()
+            .find(|r| r.contains(rect))
+            .cloned()
     }
 }
 
