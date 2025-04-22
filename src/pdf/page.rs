@@ -79,34 +79,62 @@ pub fn get_pdf_fonts(doc: &Document, page: u32) -> PdfFonts {
     PdfFonts(doc, fonts)
 }
 pub struct PdfFonts<'pdf>(&'pdf Document, &'pdf lopdf::Dictionary);
-pub struct PdfFont {
-    first_char: usize,
-    widths: Box<[f32]>,
+pub enum PdfFont<'pdf> {
+    Regular {
+        first_char: usize,
+        widths: Box<[f32]>,
+    },
+    CidFont {
+        doc: &'pdf Document,
+        font: &'pdf lopdf::Dictionary,
+    },
 }
+/*
+>>> font.get("/TT35").get_object()
+{'/BaseFont': '/HKLMCJ+Cambria', '/DescendantFonts': [IndirectObject(16704, 0, 123145300088704)], '/Encoding': '/Identity-H', '/Subtype': '/Type0', '/ToUnicode': IndirectObject(7633, 0, 123145300088704), '/Type': '/Font'}
+>>> font.get("/TT35").get_object().get("/DescendantFonts")[0].get_object()
+{'/BaseFont': '/HKLMCJ+Cambria', '/CIDSystemInfo': {'/Ordering': 'Identity', '/Registry': 'Adobe', '/Supplement': 0}, '/CIDToGIDMap': '/Identity', '/DW': 1000, '/FontDescriptor': IndirectObject(16705, 0, 123145300088704), '/Subtype': '/CIDFontType2', '/Type': '/Font', '/W': [939, [554], 950, 951, 554, 955, [851]]}
+*/
 impl<'pdf> PdfFonts<'pdf> {
-    pub fn get(&self, font_name: impl AsRef<str>) -> Option<PdfFont> {
-        let Ok(font) = self.1.get(font_name.as_ref().as_bytes()) else {
-            return None;
-        };
+    pub fn get(&self, font_name: impl AsRef<str>) -> PdfFont {
+        let font = self.1.get(font_name.as_ref().as_bytes()).unwrap();
         let font = self.0.dereference(font).unwrap().1.as_dict().unwrap();
-        let Ok(widths) = font.get(b"Widths").and_then(lopdf::Object::as_array) else {
-            return None;
-        };
-        let Ok(first_char) = font.get(b"FirstChar").and_then(lopdf::Object::as_i64) else {
-            return None;
-        };
-        Some(PdfFont {
+        // TODO Custom Encoding not covered
+        if font.get(b"Subtype").unwrap().as_name_str().unwrap() != "Type0" {
+            self.get_regular(&font)
+        } else {
+            self.get_cidfont(&font)
+        }
+    }
+    fn get_regular(&self, font: &lopdf::Dictionary) -> PdfFont {
+        let widths = font
+            .get(b"Widths")
+            .and_then(lopdf::Object::as_array)
+            .unwrap();
+        let first_char = font
+            .get(b"FirstChar")
+            .and_then(lopdf::Object::as_i64)
+            .unwrap();
+        PdfFont::Regular {
             first_char: first_char as usize,
             widths: widths
                 .iter()
                 .map(|w| w.as_i64().unwrap() as f32 / 1000.0)
                 .collect(),
-        })
+        }
+    }
+    fn get_cidfont(&self, font: &'pdf lopdf::Dictionary) -> PdfFont<'pdf> {
+        PdfFont::CidFont { doc: self.0, font }
     }
 }
-impl PdfFont {
+impl<'pdf> PdfFont<'pdf> {
     pub fn get_char_width(&self, c: u8) -> f32 {
-        let index = c as usize - self.first_char;
-        self.widths[index]
+        match self {
+            Self::Regular { first_char, widths } => {
+                let index = c as usize - first_char;
+                widths[index]
+            }
+            PdfFont::CidFont { doc, font } => todo!(),
+        }
     }
 }

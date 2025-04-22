@@ -21,7 +21,7 @@ pub fn operator_to_chars(
         match op.operator.as_str() {
             "Tfs" => unimplemented!(),
             "Tf" => {
-                font = fonts.get(op.operands[0].as_name_str().unwrap());
+                font = Some(fonts.get(op.operands[0].as_name_str().unwrap()));
                 font_scale = extract_num(&op.operands[1]);
             }
             "Tc" => char_space = extract_num(&op.operands[0]),
@@ -244,7 +244,13 @@ impl PdfChar {
                 };
                 self.represent_as = Some(data);
             }
-            Either::Right(raw) => {}
+            Either::Right(raw) => {
+                let data = match raw.as_ref() {
+                    [0, 0] => "".into(),
+                    _ => unimplemented!("{:?}", raw),
+                };
+                self.represent_as = Some(data);
+            }
         }
     }
     #[inline]
