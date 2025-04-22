@@ -107,6 +107,6 @@ impl<'pdf> PdfFonts<'pdf> {
 impl PdfFont {
     pub fn get_char_width(&self, c: u8) -> f32 {
         let index = c as usize - self.first_char;
-        *self.widths.get(index).unwrap_or(&0.0)
+        self.widths[index]
     }
 }

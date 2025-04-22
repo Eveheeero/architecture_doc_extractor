@@ -1,6 +1,7 @@
 use crate::pdf::v1::{extract_num, PDF_TEXT_HEIGHT_FACTOR};
+use either::Either;
 use geo::{BoundingRect, MultiPolygon, Rect};
-use lopdf::{content::Operation, Object};
+use lopdf::{content::Operation, Object, StringFormat};
 use std::cmp::Ordering;
 use tracing::debug;
 
@@ -47,13 +48,7 @@ pub fn operator_to_chars(
                 let mut last_x = pointer.0;
                 for operand in op.operands {
                     match operand {
-                        Object::String(mut s, m) => {
-                            if m == lopdf::StringFormat::Hexadecimal {
-                                debug!(?s, "Hex in Tj");
-                                assert_eq!(s.len(), 2);
-                                assert_eq!(s[0], 0);
-                                s = [s[1]].into();
-                            }
+                        Object::String(s, StringFormat::Literal) => {
                             for c in s {
                                 let width = font.as_ref().unwrap().get_char_width(c)
                                     * width_factor
@@ -65,7 +60,7 @@ pub fn operator_to_chars(
                                     [last_x + width, pointer.1 + height],
                                 );
                                 let pdf_char = PdfChar {
-                                    raw: c,
+                                    raw: Either::Left(c),
                                     rect,
                                     represent_as: None,
                                 };
@@ -74,6 +69,9 @@ pub fn operator_to_chars(
                             }
                             last_x += word_space;
                         }
+                        Object::String(s, StringFormat::Hexadecimal) => {
+                            debug!(?s, "Hex in Tj");
+                        }
                         Object::Array(operands) => {
                             for operand in operands {
                                 match operand {
@@ -81,13 +79,7 @@ pub fn operator_to_chars(
                                         last_x -= i as f32 / 1000.0 * width_factor
                                     }
                                     Object::Real(i) => last_x -= i / 1000.0 * width_factor,
-                                    Object::String(mut s, m) => {
-                                        if m == lopdf::StringFormat::Hexadecimal {
-                                            debug!(?s, "Hex in Tj");
-                                            assert_eq!(s.len(), 2);
-                                            assert_eq!(s[0], 0);
-                                            s = [s[1]].into();
-                                        }
+                                    Object::String(s, StringFormat::Literal) => {
                                         for c in s {
                                             let width = font.as_ref().unwrap().get_char_width(c)
                                                 * width_factor
@@ -99,7 +91,7 @@ pub fn operator_to_chars(
                                                 [last_x + width, pointer.1 + height],
                                             );
                                             let pdf_char = PdfChar {
-                                                raw: c,
+                                                raw: Either::Left(c),
                                                 rect,
                                                 represent_as: None,
                                             };
@@ -107,6 +99,9 @@ pub fn operator_to_chars(
                                             result.push(pdf_char);
                                         }
                                         last_x += word_space;
+                                    }
+                                    Object::String(s, StringFormat::Hexadecimal) => {
+                                        debug!(?s, "Hex in Tj");
                                     }
                                     _ => panic!("{:?}", operand),
                                 }
@@ -203,7 +198,7 @@ impl PdfString {
     }
 }
 pub struct PdfChar {
-    raw: u8,
+    raw: Either<u8, Box<[u8; 2]>>,
     // x, height
     rect: Rect<f32>,
     represent_as: Option<String>,
@@ -213,35 +208,44 @@ impl PdfChar {
         if self.represent_as.is_some() {
             return;
         }
-        let data = match self.raw {
-            0x20..=0x7e => String::from_utf8([self.raw].into()).unwrap(),
-            0x2 => '≠'.into(),
-            0x3 => '≥'.into(),
-            0x4 => '≤'.into(),
-            0x5 => '*'.into(),
-            0x6 => '∞'.into(),
-            0x7 => 'π'.into(),
-            0x8 => 'Š'.into(),
-            0x9 => 'ε'.into(),
-            0xa => 'Σ'.into(),
-            0x82 => ','.into(),
-            0x87 => '⁄'.into(),
-            0x91 => '\''.into(),
-            0x92 => '\''.into(),
-            0x93 => '\"'.into(),
-            0x94 => '\"'.into(),
-            0x95 => '-'.into(),
-            0x96 => '-'.into(),
-            0x97 => '-'.into(),
-            0x8a => '-'.into(),
-            0x99 => '™'.into(),
-            0xab => "<<".into(),
-            0xae => '®'.into(),
-            0xb1 => '−'.into(),
-            0xb5 => 'μ'.into(),
-            _ => unimplemented!("{}", self.raw),
-        };
-        self.represent_as = Some(data);
+        match &self.raw {
+            Either::Left(raw) => {
+                let data = match raw {
+                    0x20..=0x7e => String::from_utf8([*raw].into()).unwrap(),
+                    0x2 => '≠'.into(),
+                    0x3 => '≥'.into(),
+                    0x4 => '≤'.into(),
+                    0x5 => '*'.into(),
+                    0x6 => '∞'.into(),
+                    0x7 => 'π'.into(),
+                    0x8 => 'Š'.into(),
+                    0x9 => 'ε'.into(),
+                    0xa => 'Σ'.into(),
+                    0xb => 'σ'.into(),
+                    0x82 => ','.into(),
+                    0x87 => '⁄'.into(),
+                    0x85 => '…'.into(),
+                    0x8a => '-'.into(),
+                    0x8f => '≠'.into(),
+                    0x91 => '\''.into(),
+                    0x92 => '\''.into(),
+                    0x93 => '\"'.into(),
+                    0x94 => '\"'.into(),
+                    0x95 => '-'.into(),
+                    0x96 => '-'.into(),
+                    0x97 => '-'.into(),
+                    0x99 => '™'.into(),
+                    0xab => "<<".into(),
+                    0xae => '®'.into(),
+                    0xb1 => '±'.into(),
+                    0xb5 => 'μ'.into(),
+                    0xbd => '½'.into(),
+                    _ => unimplemented!("{}", raw),
+                };
+                self.represent_as = Some(data);
+            }
+            Either::Right(raw) => {}
+        }
     }
     #[inline]
     pub fn get(&self) -> &str {
