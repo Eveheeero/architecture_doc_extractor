@@ -83,18 +83,15 @@ pub enum PdfFont<'pdf> {
     Regular {
         first_char: usize,
         widths: Box<[f32]>,
+        doc: &'pdf Document,
+        font_file: &'pdf lopdf::Dictionary,
     },
     CidFont {
         doc: &'pdf Document,
         font: &'pdf lopdf::Dictionary,
     },
 }
-/*
->>> font.get("/TT35").get_object()
-{'/BaseFont': '/HKLMCJ+Cambria', '/DescendantFonts': [IndirectObject(16704, 0, 123145300088704)], '/Encoding': '/Identity-H', '/Subtype': '/Type0', '/ToUnicode': IndirectObject(7633, 0, 123145300088704), '/Type': '/Font'}
->>> font.get("/TT35").get_object().get("/DescendantFonts")[0].get_object()
-{'/BaseFont': '/HKLMCJ+Cambria', '/CIDSystemInfo': {'/Ordering': 'Identity', '/Registry': 'Adobe', '/Supplement': 0}, '/CIDToGIDMap': '/Identity', '/DW': 1000, '/FontDescriptor': IndirectObject(16705, 0, 123145300088704), '/Subtype': '/CIDFontType2', '/Type': '/Font', '/W': [939, [554], 950, 951, 554, 955, [851]]}
-*/
+
 impl<'pdf> PdfFonts<'pdf> {
     pub fn get(&self, font_name: impl AsRef<str>) -> PdfFont {
         let font = self.1.get(font_name.as_ref().as_bytes()).unwrap();
@@ -106,7 +103,7 @@ impl<'pdf> PdfFonts<'pdf> {
             self.get_cidfont(&font)
         }
     }
-    fn get_regular(&self, font: &lopdf::Dictionary) -> PdfFont {
+    fn get_regular(&'pdf self, font: &'pdf lopdf::Dictionary) -> PdfFont<'pdf> {
         let widths = font
             .get(b"Widths")
             .and_then(lopdf::Object::as_array)
@@ -115,12 +112,21 @@ impl<'pdf> PdfFonts<'pdf> {
             .get(b"FirstChar")
             .and_then(lopdf::Object::as_i64)
             .unwrap();
+        let font_file = self
+            .0
+            .dereference(font.get(b"FontDescriptor").unwrap())
+            .unwrap()
+            .1
+            .as_dict()
+            .unwrap();
         PdfFont::Regular {
             first_char: first_char as usize,
             widths: widths
                 .iter()
                 .map(|w| w.as_i64().unwrap() as f32 / 1000.0)
                 .collect(),
+            doc: self.0,
+            font_file: font_file,
         }
     }
     fn get_cidfont(&self, font: &'pdf lopdf::Dictionary) -> PdfFont<'pdf> {
@@ -130,11 +136,50 @@ impl<'pdf> PdfFonts<'pdf> {
 impl<'pdf> PdfFont<'pdf> {
     pub fn get_char_width(&self, c: u8) -> f32 {
         match self {
-            Self::Regular { first_char, widths } => {
+            Self::Regular {
+                first_char, widths, ..
+            } => {
                 let index = c as usize - first_char;
                 widths[index]
             }
             PdfFont::CidFont { doc, font } => todo!(),
+        }
+    }
+    pub fn get_hex_width(&self, hex: [u8; 2]) -> f32 {
+        let PdfFont::CidFont { doc, font } = self else {
+            unreachable!()
+        };
+        // get with ToUnicode (stream) and DescendantFonts (list of reference)
+        /*
+        >>> font.get("/TT35").get_object()
+        {'/BaseFont': '/HKLMCJ+Cambria', '/DescendantFonts': [IndirectObject(16704, 0, 123145300088704)], '/Encoding': '/Identity-H', '/Subtype': '/Type0', '/ToUnicode': IndirectObject(7633, 0, 123145300088704), '/Type': '/Font'}
+        >>> font.get("/TT35").get_object().get("/DescendantFonts")[0].get_object()
+        {'/BaseFont': '/HKLMCJ+Cambria', '/CIDSystemInfo': {'/Ordering': 'Identity', '/Registry': 'Adobe', '/Supplement': 0}, '/CIDToGIDMap': '/Identity', '/DW': 1000, '/FontDescriptor': IndirectObject(16705, 0, 123145300088704), '/Subtype': '/CIDFontType2', '/Type': '/Font', '/W': [939, [554], 950, 951, 554, 955, [851]]}
+         */
+        todo!()
+    }
+    pub fn get_hex_char(&self, hex: [u8; 2]) -> char {
+        let PdfFont::CidFont { doc, font } = self else {
+            unreachable!()
+        };
+        todo!()
+    }
+    pub fn get_font_file(&self) -> &Vec<u8> {
+        match self {
+            PdfFont::Regular { doc, font_file, .. } => {
+                let font_file_key = font_file
+                    .as_hashmap()
+                    .keys()
+                    .find(|k| k.starts_with(b"FontFile"))
+                    .unwrap();
+                &doc.dereference(font_file.get(&font_file_key).unwrap())
+                    .unwrap()
+                    .1
+                    .as_stream()
+                    .unwrap()
+                    .content
+            }
+            PdfFont::CidFont { .. } => unreachable!(),
         }
     }
 }
