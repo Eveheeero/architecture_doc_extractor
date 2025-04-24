@@ -1,5 +1,7 @@
 #![allow(dead_code)]
 
+use std::io::Read;
+
 use lopdf::{content::Content, Document};
 use tracing::debug;
 
@@ -78,18 +80,26 @@ pub fn get_pdf_fonts(doc: &Document, page: u32) -> PdfFonts {
     let fonts = resources.get(b"Font").unwrap().as_dict().unwrap();
     PdfFonts(doc, fonts)
 }
+#[derive(Debug)]
 pub struct PdfFonts<'pdf>(&'pdf Document, &'pdf lopdf::Dictionary);
+#[derive(Debug)]
 pub enum PdfFont<'pdf> {
     Regular {
         first_char: usize,
         widths: Box<[f32]>,
         doc: &'pdf Document,
-        font_file: &'pdf lopdf::Dictionary,
+        font_descripter: &'pdf lopdf::Dictionary,
     },
     CidFont {
         doc: &'pdf Document,
         font: &'pdf lopdf::Dictionary,
+        to_unicode: ToUnicode,
     },
+}
+#[derive(Debug)]
+pub struct ToUnicode {
+    origin: String,
+    mapping: std::collections::HashMap<[u8; 2], [u8; 2]>,
 }
 
 impl<'pdf> PdfFonts<'pdf> {
@@ -112,13 +122,7 @@ impl<'pdf> PdfFonts<'pdf> {
             .get(b"FirstChar")
             .and_then(lopdf::Object::as_i64)
             .unwrap();
-        let font_file = self
-            .0
-            .dereference(font.get(b"FontDescriptor").unwrap())
-            .unwrap()
-            .1
-            .as_dict()
-            .unwrap();
+        let font_descripter = get_font_descripter(self.0, font);
         PdfFont::Regular {
             first_char: first_char as usize,
             widths: widths
@@ -126,11 +130,32 @@ impl<'pdf> PdfFonts<'pdf> {
                 .map(|w| w.as_i64().unwrap() as f32 / 1000.0)
                 .collect(),
             doc: self.0,
-            font_file: font_file,
+            font_descripter,
         }
     }
     fn get_cidfont(&self, font: &'pdf lopdf::Dictionary) -> PdfFont<'pdf> {
-        PdfFont::CidFont { doc: self.0, font }
+        // {'/BaseFont': '/HKLMCJ+Cambria', '/DescendantFonts': [IndirectObject(16704, 0, 123145300088704)], '/Encoding': '/Identity-H', '/Subtype': '/Type0', '/ToUnicode': IndirectObject(7633, 0, 123145300088704), '/Type': '/Font'}
+        // Descendant Font
+        // {'/BaseFont': '/HKLMCJ+Cambria', '/CIDSystemInfo': {'/Ordering': 'Identity', '/Registry': 'Adobe', '/Supplement': 0}, '/CIDToGIDMap': '/Identity', '/DW': 1000, '/FontDescriptor': IndirectObject(16705, 0, 123145300088704), '/Subtype': '/CIDFontType2', '/Type': '/Font', '/W': [939, [554], 950, 951, 554, 955, [851]]}
+        // ToUnicode (Decompressed by zlib)
+        // /CIDInit /ProcSet findresource begin 12 dict begin begincmap /CIDSystemInfo <<\n/Registry (HKLMCJ+TT35+0) /Ordering (T42UV) /Supplement 0 >> def\n/CMapName /HKLMCJ+TT35+0 def\n/CMapType 2 def\n1 begincodespacerange <03ab> <03bb> endcodespacerange\n2 beginbfchar\n<03ab> <2212>\n<03bb> <221E>\nendbfchar\n1 beginbfrange\n<03b6> <03b7> <2264>\nendbfrange\nendcmap CMapName currentdict /CMap defineresource pop end end\n
+
+        let to_unicode = self
+            .0
+            .dereference(font.get(b"ToUnicode").unwrap())
+            .unwrap()
+            .1
+            .as_stream()
+            .unwrap();
+        let mut reader = flate2::bufread::ZlibDecoder::new(&*to_unicode.content);
+        let mut to_unicode = String::new();
+        reader.read_to_string(&mut to_unicode).unwrap();
+        let to_unicode = parse_tounicode(to_unicode);
+        PdfFont::CidFont {
+            doc: self.0,
+            font,
+            to_unicode,
+        }
     }
 }
 impl<'pdf> PdfFont<'pdf> {
@@ -142,44 +167,99 @@ impl<'pdf> PdfFont<'pdf> {
                 let index = c as usize - first_char;
                 widths[index]
             }
-            PdfFont::CidFont { doc, font } => todo!(),
+            PdfFont::CidFont { .. } => todo!(),
         }
     }
     pub fn get_cid_width(&self, hex: [u8; 2]) -> f32 {
-        let PdfFont::CidFont { doc, font } = self else {
+        let PdfFont::CidFont { doc, font, .. } = self else {
             unreachable!()
         };
-        // get with ToUnicode (stream) and DescendantFonts (list of reference)
-        /*
-        >>> font.get("/TT35").get_object()
-        {'/BaseFont': '/HKLMCJ+Cambria', '/DescendantFonts': [IndirectObject(16704, 0, 123145300088704)], '/Encoding': '/Identity-H', '/Subtype': '/Type0', '/ToUnicode': IndirectObject(7633, 0, 123145300088704), '/Type': '/Font'}
-        >>> font.get("/TT35").get_object().get("/DescendantFonts")[0].get_object()
-        {'/BaseFont': '/HKLMCJ+Cambria', '/CIDSystemInfo': {'/Ordering': 'Identity', '/Registry': 'Adobe', '/Supplement': 0}, '/CIDToGIDMap': '/Identity', '/DW': 1000, '/FontDescriptor': IndirectObject(16705, 0, 123145300088704), '/Subtype': '/CIDFontType2', '/Type': '/Font', '/W': [939, [554], 950, 951, 554, 955, [851]]}
-         */
         todo!()
     }
     pub fn get_cid_char(&self, hex: [u8; 2]) -> char {
-        let PdfFont::CidFont { doc, font } = self else {
+        let PdfFont::CidFont { doc, font, .. } = self else {
             unreachable!()
         };
         todo!()
     }
-    pub fn get_font_file(&self) -> &Vec<u8> {
+    fn get_font_file(&self) -> &Vec<u8> {
         match self {
-            PdfFont::Regular { doc, font_file, .. } => {
-                let font_file_key = font_file
-                    .as_hashmap()
-                    .keys()
-                    .find(|k| k.starts_with(b"FontFile"))
-                    .unwrap();
-                &doc.dereference(font_file.get(&font_file_key).unwrap())
-                    .unwrap()
-                    .1
-                    .as_stream()
-                    .unwrap()
-                    .content
-            }
+            PdfFont::Regular {
+                doc,
+                font_descripter,
+                ..
+            } => get_font_file(doc, font_descripter),
             PdfFont::CidFont { .. } => unreachable!(),
         }
+    }
+}
+
+fn get_font_descripter<'pdf>(
+    doc: &'pdf Document,
+    font: &'pdf lopdf::Dictionary,
+) -> &'pdf lopdf::Dictionary {
+    doc.dereference(font.get(b"FontDescriptor").unwrap())
+        .unwrap()
+        .1
+        .as_dict()
+        .unwrap()
+}
+
+fn get_font_file<'pdf>(
+    doc: &'pdf Document,
+    font_descripter: &'pdf lopdf::Dictionary,
+) -> &'pdf Vec<u8> {
+    let font_file_key = font_descripter
+        .as_hashmap()
+        .keys()
+        .find(|k| k.starts_with(b"FontFile"))
+        .unwrap();
+    &doc.dereference(font_descripter.get(&font_file_key).unwrap())
+        .unwrap()
+        .1
+        .as_stream()
+        .unwrap()
+        .content
+}
+
+fn parse_tounicode(origin: String) -> ToUnicode {
+    let mut mapping = std::collections::HashMap::new();
+    use itertools::Itertools;
+
+    let beginbfchar = origin.find("beginbfchar").unwrap();
+    let endbfchar = origin.find("endbfchar").unwrap();
+    let bfchar = &origin[beginbfchar..endbfchar];
+    let beginbfrange = origin.find("beginbfrange").unwrap();
+    let endbfrange = origin.find("endbfrange").unwrap();
+    let bfrange = &origin[beginbfrange..endbfrange];
+
+    let mut bfchar = bfchar.split_whitespace();
+    bfchar.next();
+    for mut bfchar in &bfchar.chunks(2) {
+        let f = bfchar.next().unwrap();
+        let f = f.trim_matches(|c| c == '<' || c == '>');
+        let f = u16::from_str_radix(f, 16).unwrap();
+        let f = f.to_be_bytes();
+        let t = bfchar.next().unwrap();
+        let t = t.trim_matches(|c| c == '<' || c == '>');
+        let t = u16::from_str_radix(t, 16).unwrap();
+        let t = t.to_be_bytes();
+        mapping.insert(f, t);
+    }
+
+    todo!();
+
+    ToUnicode { origin, mapping }
+}
+
+impl ToUnicode {
+    pub fn origin(&self) -> &str {
+        &self.origin
+    }
+    pub fn mapping_raw(&self) -> &std::collections::HashMap<[u8; 2], [u8; 2]> {
+        &self.mapping
+    }
+    pub fn mapping(&self, hex: [u8; 2]) -> [u8; 2] {
+        *self.mapping.get(&hex).unwrap()
     }
 }

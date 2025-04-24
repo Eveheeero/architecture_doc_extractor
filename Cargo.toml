@@ -23,11 +23,13 @@ tracing = { version = "*", features = ["log"] }
 simplelog = "*"
 fastrand = "2.3.0"
 eframe = { version = "0.31.1", optional = true }
-ab_glyph = { version = "0.2.29", optional = true }
+ab_glyph = { version = "0.2.29", optional = false }
 epaint_default_fonts = { version = "0.31.1", optional = true }
 geo = "0.30.0"
 either = "1.15.0"
+flate2 = "1.1.1"
+itertools = "0.14.0"
 
 [features]
 default = []
-pdf_inspector = ["dep:eframe", "dep:epaint_default_fonts", "dep:ab_glyph"]
+pdf_inspector = ["dep:eframe", "dep:epaint_default_fonts"]
