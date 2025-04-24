@@ -51,10 +51,21 @@ fn char_width() {
 
     let fonts = crate::pdf::get_pdf_fonts(doc, page);
     let tt4 = fonts.get("TT4");
-    assert!(tt4.is_some());
-    let tt4 = tt4.unwrap();
     assert_eq!(tt4.get_char_width(b' '), 0.247);
     assert_eq!(tt4.get_char_width(b'!'), 0.194);
+}
+
+#[test]
+fn cid_char_width() {
+    crate::setup_logger();
+    let doc = get_pdf();
+    let page = 1804;
+    let cid = [3, 187];
+    let fonts = crate::pdf::get_pdf_fonts(doc, page);
+    let tt35 = fonts.get("TT35");
+    let c = tt35.get_cid_char(cid);
+    let c_width = tt35.get_cid_width(cid);
+    dbg!(c, c_width);
 }
 
 #[test]

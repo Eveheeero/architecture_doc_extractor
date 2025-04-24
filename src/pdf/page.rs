@@ -145,7 +145,7 @@ impl<'pdf> PdfFont<'pdf> {
             PdfFont::CidFont { doc, font } => todo!(),
         }
     }
-    pub fn get_hex_width(&self, hex: [u8; 2]) -> f32 {
+    pub fn get_cid_width(&self, hex: [u8; 2]) -> f32 {
         let PdfFont::CidFont { doc, font } = self else {
             unreachable!()
         };
@@ -158,7 +158,7 @@ impl<'pdf> PdfFont<'pdf> {
          */
         todo!()
     }
-    pub fn get_hex_char(&self, hex: [u8; 2]) -> char {
+    pub fn get_cid_char(&self, hex: [u8; 2]) -> char {
         let PdfFont::CidFont { doc, font } = self else {
             unreachable!()
         };
