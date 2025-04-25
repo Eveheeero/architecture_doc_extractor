@@ -71,6 +71,26 @@ pub fn operator_to_chars(
                         }
                         Object::String(s, StringFormat::Hexadecimal) => {
                             debug!(?s, "Hex in Tj");
+                            for c_hex in s.chunks(2) {
+                                let c_hex = [c_hex[0], c_hex[1]];
+                                let c = font.as_ref().unwrap().get_cid_char(c_hex);
+                                let width = font.as_ref().unwrap().get_cid_width(c_hex)
+                                    * width_factor
+                                    * font_scale;
+                                let height = height_factor;
+                                let rect = Rect::new(
+                                    [last_x, pointer.1],
+                                    [last_x + width, pointer.1 + height],
+                                );
+                                let pdf_char = PdfChar {
+                                    raw: Either::Right((c_hex.into(), c)),
+                                    rect,
+                                    represent_as: None,
+                                };
+                                last_x += rect.width() + char_space;
+                                result.push(pdf_char);
+                            }
+                            last_x += word_space;
                         }
                         Object::Array(operands) => {
                             for operand in operands {
@@ -102,6 +122,26 @@ pub fn operator_to_chars(
                                     }
                                     Object::String(s, StringFormat::Hexadecimal) => {
                                         debug!(?s, "Hex in Tj");
+                                        for c_hex in s.chunks(2) {
+                                            let c_hex = [c_hex[0], c_hex[1]];
+                                            let c = font.as_ref().unwrap().get_cid_char(c_hex);
+                                            let width = font.as_ref().unwrap().get_cid_width(c_hex)
+                                                * width_factor
+                                                * font_scale;
+                                            let height = height_factor;
+                                            let rect = Rect::new(
+                                                [last_x, pointer.1],
+                                                [last_x + width, pointer.1 + height],
+                                            );
+                                            let pdf_char = PdfChar {
+                                                raw: Either::Right((c_hex.into(), c)),
+                                                rect,
+                                                represent_as: None,
+                                            };
+                                            last_x += rect.width() + char_space;
+                                            result.push(pdf_char);
+                                        }
+                                        last_x += word_space;
                                     }
                                     _ => panic!("{:?}", operand),
                                 }
@@ -198,7 +238,7 @@ impl PdfString {
     }
 }
 pub struct PdfChar {
-    raw: Either<u8, Box<[u8; 2]>>,
+    raw: Either<u8, (Box<[u8; 2]>, char)>,
     // x, height
     rect: Rect<f32>,
     represent_as: Option<String>,
@@ -245,11 +285,7 @@ impl PdfChar {
                 self.represent_as = Some(data);
             }
             Either::Right(raw) => {
-                let data = match raw.as_ref() {
-                    [0, 0] => "".into(),
-                    _ => unimplemented!("{:?}", raw),
-                };
-                self.represent_as = Some(data);
+                self.represent_as = Some(raw.1.into());
             }
         }
     }
