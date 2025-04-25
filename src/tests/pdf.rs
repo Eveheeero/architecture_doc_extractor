@@ -64,8 +64,9 @@ fn cid_char_width() {
     let fonts = crate::pdf::get_pdf_fonts(doc, page);
     let tt35 = fonts.get("TT35");
     let c = tt35.get_cid_char(cid);
+    assert_eq!(c, '∞');
     let c_width = tt35.get_cid_width(cid);
-    dbg!(c, c_width);
+    assert_eq!(c_width, 1.348);
 }
 
 #[test]

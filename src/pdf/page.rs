@@ -1,8 +1,8 @@
 #![allow(dead_code)]
 
-use std::io::Read;
-
+use ab_glyph::Font;
 use lopdf::{content::Content, Document};
+use std::io::Read;
 use tracing::debug;
 
 pub fn page_to_texts_v1(doc: &Document, page: u32) -> Vec<String> {
@@ -94,6 +94,7 @@ pub enum PdfFont<'pdf> {
         doc: &'pdf Document,
         font: &'pdf lopdf::Dictionary,
         to_unicode: ToUnicode,
+        font_arc: ab_glyph::FontArc,
     },
 }
 #[derive(Debug)]
@@ -151,10 +152,23 @@ impl<'pdf> PdfFonts<'pdf> {
         let mut to_unicode = String::new();
         reader.read_to_string(&mut to_unicode).unwrap();
         let to_unicode = parse_tounicode(to_unicode);
+
+        let descendant_font = &font.get(b"DescendantFonts").unwrap().as_array().unwrap()[0];
+        let descendant_font = self
+            .0
+            .dereference(descendant_font)
+            .unwrap()
+            .1
+            .as_dict()
+            .unwrap();
+        let font_descripter = get_font_descripter(self.0, descendant_font);
+        let font_file = get_font_file(self.0, font_descripter);
+        let font_arc = ab_glyph::FontArc::try_from_vec(font_file).unwrap();
         PdfFont::CidFont {
             doc: self.0,
             font,
             to_unicode,
+            font_arc,
         }
     }
 }
@@ -171,18 +185,24 @@ impl<'pdf> PdfFont<'pdf> {
         }
     }
     pub fn get_cid_width(&self, hex: [u8; 2]) -> f32 {
-        let PdfFont::CidFont { doc, font, .. } = self else {
+        let PdfFont::CidFont {
+            font_arc: font_ref, ..
+        } = self
+        else {
             unreachable!()
         };
-        todo!()
+        let c = self.get_cid_char(hex);
+        let id = font_ref.glyph_id(c);
+        font_ref.h_advance_unscaled(id) / 1000.0
     }
     pub fn get_cid_char(&self, hex: [u8; 2]) -> char {
-        let PdfFont::CidFont { doc, font, .. } = self else {
+        let PdfFont::CidFont { to_unicode, .. } = self else {
             unreachable!()
         };
-        todo!()
+        let c = to_unicode.mapping(hex);
+        std::char::from_u32(u16::from_be_bytes(c) as u32).unwrap()
     }
-    fn get_font_file(&self) -> &Vec<u8> {
+    fn get_font_file(&self) -> Vec<u8> {
         match self {
             PdfFont::Regular {
                 doc,
@@ -205,26 +225,33 @@ fn get_font_descripter<'pdf>(
         .unwrap()
 }
 
-fn get_font_file<'pdf>(
-    doc: &'pdf Document,
-    font_descripter: &'pdf lopdf::Dictionary,
-) -> &'pdf Vec<u8> {
+fn get_font_file<'pdf>(doc: &'pdf Document, font_descripter: &'pdf lopdf::Dictionary) -> Vec<u8> {
     let font_file_key = font_descripter
         .as_hashmap()
         .keys()
         .find(|k| k.starts_with(b"FontFile"))
         .unwrap();
-    &doc.dereference(font_descripter.get(&font_file_key).unwrap())
+    let flated = &doc
+        .dereference(font_descripter.get(&font_file_key).unwrap())
         .unwrap()
         .1
         .as_stream()
         .unwrap()
-        .content
+        .content;
+    let mut reader = flate2::bufread::ZlibDecoder::new(&**flated);
+    let mut buf = Vec::new();
+    reader.read_to_end(&mut buf).unwrap();
+    buf
 }
 
 fn parse_tounicode(origin: String) -> ToUnicode {
     let mut mapping = std::collections::HashMap::new();
     use itertools::Itertools;
+
+    let extract_hex_data = |s: &str| {
+        let d = s.trim_matches(|c| c == '<' || c == '>');
+        u16::from_str_radix(d, 16).unwrap()
+    };
 
     let beginbfchar = origin.find("beginbfchar").unwrap();
     let endbfchar = origin.find("endbfchar").unwrap();
@@ -237,17 +264,35 @@ fn parse_tounicode(origin: String) -> ToUnicode {
     bfchar.next();
     for mut bfchar in &bfchar.chunks(2) {
         let f = bfchar.next().unwrap();
-        let f = f.trim_matches(|c| c == '<' || c == '>');
-        let f = u16::from_str_radix(f, 16).unwrap();
-        let f = f.to_be_bytes();
+        let f = extract_hex_data(f).to_be_bytes();
         let t = bfchar.next().unwrap();
-        let t = t.trim_matches(|c| c == '<' || c == '>');
-        let t = u16::from_str_radix(t, 16).unwrap();
-        let t = t.to_be_bytes();
+        let t = extract_hex_data(t).to_be_bytes();
         mapping.insert(f, t);
     }
 
-    todo!();
+    if bfrange.contains('<') {
+        let (bfrange, range) = bfrange.split_once('<').unwrap();
+        let (range, _) = range.split_once('>').unwrap();
+        let mut bfchar = bfrange.split_whitespace();
+        bfchar.next();
+        for (bfchar, range) in bfchar.zip(range.split_whitespace()) {
+            let f = extract_hex_data(bfchar);
+            let t = extract_hex_data(range);
+            mapping.insert(f.to_be_bytes(), t.to_be_bytes());
+        }
+    } else {
+        let mut bfrange = bfrange.split_whitespace();
+        bfrange.next();
+        let f = bfrange.next().unwrap();
+        let f = extract_hex_data(f);
+        let t = bfrange.next().unwrap();
+        let t = extract_hex_data(t);
+        let e = bfrange.next().unwrap();
+        let e = extract_hex_data(e);
+        for (i, j) in (f..=t).enumerate() {
+            mapping.insert(j.to_be_bytes(), (e + i as u16).to_be_bytes());
+        }
+    }
 
     ToUnicode { origin, mapping }
 }
