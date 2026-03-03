@@ -1,4 +1,4 @@
-use crate::intel::result::{MdTable, Instruction};
+use crate::intel::result::{Instruction, MdTable};
 use crate::pdf::v2::*;
 use geo::Rect;
 use std::collections::BTreeMap;
@@ -57,7 +57,9 @@ fn is_instruction_title(text: &str) -> bool {
         return false;
     }
     // Extract the instruction name part (before any separator)
-    let name_part = if let Some(idx) = trimmed.find(|c: char| c == '\u{2014}' || c == '\u{2013}' || c == '\u{97}') {
+    let name_part = if let Some(idx) =
+        trimmed.find(|c: char| c == '\u{2014}' || c == '\u{2013}' || c == '\u{97}')
+    {
         &trimmed[..idx]
     } else if let Some(idx) = trimmed.find(" - ") {
         &trimmed[..idx]
@@ -70,7 +72,9 @@ fn is_instruction_title(text: &str) -> bool {
     // The instruction name must be primarily uppercase letters, digits, and allowed separators
     // like / , [ ] and spaces
     let valid_chars = name_part.chars().all(|c| {
-        c.is_ascii_uppercase() || c.is_ascii_digit() || matches!(c, '/' | ',' | '[' | ']' | ' ' | '.')
+        c.is_ascii_uppercase()
+            || c.is_ascii_digit()
+            || matches!(c, '/' | ',' | '[' | ']' | ' ' | '.')
     });
     if !valid_chars {
         return false;
@@ -164,10 +168,11 @@ fn build_tables_from_cells(
                 group_consumed.push(idx);
                 for (ci, text) in char_cells {
                     let cell = &group_cells[ci];
-                    cell_contents
-                        .entry(ci)
-                        .or_default()
-                        .push((cell.center().x, cell.center().y, text));
+                    cell_contents.entry(ci).or_default().push((
+                        cell.center().x,
+                        cell.center().y,
+                        text,
+                    ));
                 }
             }
         }
@@ -192,8 +197,12 @@ fn build_tables_from_cells(
                 .collect::<Vec<_>>()
                 .join(" ");
             grid.insert((row, col), combined);
-            if row > max_row { max_row = row; }
-            if col > max_col { max_col = col; }
+            if row > max_row {
+                max_row = row;
+            }
+            if col > max_col {
+                max_col = col;
+            }
         }
 
         // Build MdTable: first row = headers
@@ -212,7 +221,8 @@ fn build_tables_from_cells(
         }
 
         if !headers.is_empty() {
-            let top_y = group_cells.iter()
+            let top_y = group_cells
+                .iter()
                 .map(|c| c.max().y)
                 .fold(f32::MIN, f32::max);
             tables.push((top_y, MdTable { headers, rows }));
@@ -256,10 +266,7 @@ fn indent_operation_lines(lines: &[(f32, String)]) -> String {
     }
 
     // Find the minimum X (base indentation)
-    let base_x = lines
-        .iter()
-        .map(|(x, _)| *x)
-        .fold(f32::MAX, f32::min);
+    let base_x = lines.iter().map(|(x, _)| *x).fold(f32::MAX, f32::min);
 
     // Detect indent unit from X position differences
     let mut x_positions: Vec<f32> = lines.iter().map(|(x, _)| *x).collect();
@@ -275,7 +282,11 @@ fn indent_operation_lines(lines: &[(f32, String)]) -> String {
                 min_gap = gap;
             }
         }
-        if min_gap == f32::MAX { 3.5 } else { min_gap }
+        if min_gap == f32::MAX {
+            3.5
+        } else {
+            min_gap
+        }
     } else {
         3.5
     };
@@ -334,7 +345,10 @@ fn detect_section(text: &str) -> CurrentSection {
     // Only treat as a named section if it looks like a real heading
     // (at least 3 chars, starts with uppercase, no leading punctuation)
     if trimmed.len() >= 3
-        && trimmed.chars().next().map_or(false, |c| c.is_ascii_uppercase())
+        && trimmed
+            .chars()
+            .next()
+            .map_or(false, |c| c.is_ascii_uppercase())
     {
         return CurrentSection::Other(trimmed.to_owned());
     }
@@ -428,15 +442,27 @@ fn extract_mnemonic_from_merged(cell: &str) -> String {
         if token.starts_with("REX") || token.starts_with("VEX") || token.starts_with("EVEX") {
             continue;
         }
-        if *token == "NP" || *token == "+rb" || *token == "+rw" || *token == "+rd" || *token == "+ro" {
+        if *token == "NP"
+            || *token == "+rb"
+            || *token == "+rw"
+            || *token == "+rd"
+            || *token == "+ro"
+        {
             continue;
         }
         // Skip common immediate size markers
-        if matches!(*token, "ib" | "iw" | "id" | "io" | "cb" | "cw" | "cd" | "cp" | "ct") {
+        if matches!(
+            *token,
+            "ib" | "iw" | "id" | "io" | "cb" | "cw" | "cd" | "cp" | "ct"
+        ) {
             continue;
         }
         // This token looks like a mnemonic
-        if token.chars().next().map_or(false, |c| c.is_ascii_uppercase()) {
+        if token
+            .chars()
+            .next()
+            .map_or(false, |c| c.is_ascii_uppercase())
+        {
             return tokens[i..].join(" ");
         }
     }
@@ -478,8 +504,7 @@ pub(crate) fn parse_instructions(mut d: Vec<(Vec<PdfString>, PdfBoxes)>) -> Vec<
         };
 
         // Build tables from cells on this page (one per table group)
-        let (mut page_tables, consumed_indices) =
-            build_tables_from_cells(sorted_strings, boxes);
+        let (mut page_tables, consumed_indices) = build_tables_from_cells(sorted_strings, boxes);
         // Sort tables top-down (higher Y = higher on page = first)
         page_tables.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap());
         let has_tables = !page_tables.is_empty();
@@ -567,10 +592,14 @@ pub(crate) fn parse_instructions(mut d: Vec<(Vec<PdfString>, PdfBoxes)>) -> Vec<
                                         .push(text.trim().to_owned());
                                 }
                                 CurrentSection::Other(name) => {
-                                    if let Some(entry) = current.other_sections.iter_mut().find(|(n, _)| n == name) {
+                                    if let Some(entry) =
+                                        current.other_sections.iter_mut().find(|(n, _)| n == name)
+                                    {
                                         entry.1.push(text.trim().to_owned());
                                     } else {
-                                        current.other_sections.push((name.clone(), vec![text.trim().to_owned()]));
+                                        current
+                                            .other_sections
+                                            .push((name.clone(), vec![text.trim().to_owned()]));
                                     }
                                 }
                                 _ => {
@@ -645,10 +674,14 @@ pub(crate) fn parse_instructions(mut d: Vec<(Vec<PdfString>, PdfBoxes)>) -> Vec<
                         }
                         CurrentSection::Other(name) => {
                             // Find or create the named section
-                            if let Some(entry) = current.other_sections.iter_mut().find(|(n, _)| n == name) {
+                            if let Some(entry) =
+                                current.other_sections.iter_mut().find(|(n, _)| n == name)
+                            {
                                 entry.1.push(text.trim().to_owned());
                             } else {
-                                current.other_sections.push((name.clone(), vec![text.trim().to_owned()]));
+                                current
+                                    .other_sections
+                                    .push((name.clone(), vec![text.trim().to_owned()]));
                             }
                         }
                         _ => {}

@@ -1,5 +1,7 @@
 #![cfg_attr(feature = "pdf_inspector", allow(dead_code))]
 
+#[path = "arm/arm.rs"]
+pub(crate) mod arm;
 #[path = "intel/intel.rs"]
 pub(crate) mod intel;
 use architecture_doc_extractor::pdf;
@@ -16,6 +18,7 @@ use std::fs::File;
 fn main() {
     setup_logger();
     intel::main();
+    arm::main();
 }
 
 #[cfg(feature = "pdf_inspector")]

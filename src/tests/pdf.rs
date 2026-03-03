@@ -129,5 +129,8 @@ fn test_v2_parse_aaa_instruction() {
             println!("{}", line);
         }
     }
-    assert!(!instructions.is_empty(), "Should parse at least one instruction");
+    assert!(
+        !instructions.is_empty(),
+        "Should parse at least one instruction"
+    );
 }

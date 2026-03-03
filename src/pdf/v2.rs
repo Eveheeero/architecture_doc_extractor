@@ -20,8 +20,8 @@ pub fn operator_to_chars(
     for op in data.into_iter() {
         match op.operator.as_str() {
             "Tfs" => {
-                        tracing::warn!("Tfs operator not supported, skipping");
-                    }
+                tracing::warn!("Tfs operator not supported, skipping");
+            }
             "Tf" => {
                 font = Some(fonts.get(op.operands[0].as_name_str().unwrap()));
                 font_scale = extract_num(&op.operands[1]);
@@ -158,7 +158,10 @@ pub fn operator_to_chars(
                                         last_x += word_space;
                                     }
                                     _ => {
-                                        tracing::warn!(?operand, "unexpected operand in TJ array, skipping");
+                                        tracing::warn!(
+                                            ?operand,
+                                            "unexpected operand in TJ array, skipping"
+                                        );
                                     }
                                 }
                             }
@@ -218,7 +221,10 @@ fn mark_super_subscripts(s: &mut PdfString) {
     let dominant_scale = {
         let mut buckets: Vec<(f32, usize)> = Vec::new();
         for c in &s.0 {
-            if let Some(b) = buckets.iter_mut().find(|(s, _)| (*s - c.font_scale).abs() < 0.5) {
+            if let Some(b) = buckets
+                .iter_mut()
+                .find(|(s, _)| (*s - c.font_scale).abs() < 0.5)
+            {
                 b.1 += 1;
             } else {
                 buckets.push((c.font_scale, 1));
@@ -232,12 +238,11 @@ fn mark_super_subscripts(s: &mut PdfString) {
     };
 
     // Collect Y centers of chars matching dominant scale
-    let mut baseline_ys: Vec<f32> = s
-        .0
-        .iter()
-        .filter(|c| (c.font_scale - dominant_scale).abs() < 0.5)
-        .map(|c| c.rect.center().y)
-        .collect();
+    let mut baseline_ys: Vec<f32> =
+        s.0.iter()
+            .filter(|c| (c.font_scale - dominant_scale).abs() < 0.5)
+            .map(|c| c.rect.center().y)
+            .collect();
 
     if baseline_ys.is_empty() {
         return;
@@ -371,7 +376,10 @@ impl PdfChar {
                 0xd7 => '×'.into(),
                 0xf7 => '÷'.into(),
                 _ => {
-                    tracing::warn!(byte = raw, "unmapped byte in make_ready, using replacement char");
+                    tracing::warn!(
+                        byte = raw,
+                        "unmapped byte in make_ready, using replacement char"
+                    );
                     '\u{FFFD}'.into()
                 }
             },
@@ -502,7 +510,13 @@ impl PdfBoxes {
         &self.lines
     }
     pub fn get_cells(&self) -> Vec<Rect<f32>> {
-        self.cell_groups.as_ref().unwrap().iter().flatten().cloned().collect()
+        self.cell_groups
+            .as_ref()
+            .unwrap()
+            .iter()
+            .flatten()
+            .cloned()
+            .collect()
     }
     pub fn get_cell_groups(&self) -> &Vec<Vec<Rect<f32>>> {
         self.cell_groups.as_ref().unwrap()
@@ -527,8 +541,10 @@ impl PdfBoxes {
         let groups = Self::group_lines_by_overlap(&all_lines);
 
         for group in groups {
-            let h_lines: Vec<&Rect<f32>> = group.iter().filter(|r| r.width() > r.height()).collect();
-            let v_lines: Vec<&Rect<f32>> = group.iter().filter(|r| r.height() > r.width()).collect();
+            let h_lines: Vec<&Rect<f32>> =
+                group.iter().filter(|r| r.width() > r.height()).collect();
+            let v_lines: Vec<&Rect<f32>> =
+                group.iter().filter(|r| r.height() > r.width()).collect();
             if h_lines.len() < 2 || v_lines.len() < 2 {
                 continue;
             }
@@ -625,14 +641,22 @@ impl PdfBoxes {
                 let left_x = col_pair[0];
                 let right_x = col_pair[1];
 
-                let ht: Vec<&&Rect<f32>> = h_lines.iter()
-                    .filter(|h| (h.center().y - top_y).abs() < 2.0).collect();
-                let hb: Vec<&&Rect<f32>> = h_lines.iter()
-                    .filter(|h| (h.center().y - bottom_y).abs() < 2.0).collect();
-                let vl: Vec<&&Rect<f32>> = v_lines.iter()
-                    .filter(|v| (v.center().x - left_x).abs() < 2.0).collect();
-                let vr: Vec<&&Rect<f32>> = v_lines.iter()
-                    .filter(|v| (v.center().x - right_x).abs() < 2.0).collect();
+                let ht: Vec<&&Rect<f32>> = h_lines
+                    .iter()
+                    .filter(|h| (h.center().y - top_y).abs() < 2.0)
+                    .collect();
+                let hb: Vec<&&Rect<f32>> = h_lines
+                    .iter()
+                    .filter(|h| (h.center().y - bottom_y).abs() < 2.0)
+                    .collect();
+                let vl: Vec<&&Rect<f32>> = v_lines
+                    .iter()
+                    .filter(|v| (v.center().x - left_x).abs() < 2.0)
+                    .collect();
+                let vr: Vec<&&Rect<f32>> = v_lines
+                    .iter()
+                    .filter(|v| (v.center().x - right_x).abs() < 2.0)
+                    .collect();
 
                 if ht.is_empty() || hb.is_empty() || vl.is_empty() || vr.is_empty() {
                     continue;
@@ -652,10 +676,7 @@ impl PdfBoxes {
                     let cell_bottom = hb.iter().map(|h| h.max().y).fold(f32::MIN, f32::max);
 
                     if cell_left < cell_right && cell_bottom < cell_top {
-                        result.push(Rect::new(
-                            [cell_left, cell_bottom],
-                            [cell_right, cell_top],
-                        ));
+                        result.push(Rect::new([cell_left, cell_bottom], [cell_right, cell_top]));
                     }
                 }
             }

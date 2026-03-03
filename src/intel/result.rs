@@ -284,9 +284,6 @@ impl Instruction {
             .collect()
     }
     fn get_reformed_operation(&self) -> Vec<String> {
-        self.operation
-            .lines()
-            .map(|line| line.to_owned())
-            .collect()
+        self.operation.lines().map(|line| line.to_owned()).collect()
     }
 }

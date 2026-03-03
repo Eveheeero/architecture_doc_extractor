@@ -29,6 +29,8 @@ geo = "0.30.0"
 either = "1.15.0"
 flate2 = "1.1.1"
 itertools = "0.14.0"
+quick-xml = "0.37"
+tar = "0.4"
 
 [features]
 default = []

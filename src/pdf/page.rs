@@ -183,7 +183,10 @@ impl<'pdf> PdfFont<'pdf> {
             }
             PdfFont::CidFont { .. } => {
                 // CidFont字 uses get_cid_width; fallback to default width
-                tracing::warn!(byte = c, "get_char_width called on CidFont, returning default");
+                tracing::warn!(
+                    byte = c,
+                    "get_char_width called on CidFont, returning default"
+                );
                 0.5
             }
         }
@@ -200,7 +203,12 @@ impl<'pdf> PdfFont<'pdf> {
         font_ref.h_advance_unscaled(id) / 1000.0
     }
     pub fn get_cid_char(&self, hex: [u8; 2]) -> char {
-        let PdfFont::CidFont { to_unicode, font_arc, .. } = self else {
+        let PdfFont::CidFont {
+            to_unicode,
+            font_arc,
+            ..
+        } = self
+        else {
             unreachable!()
         };
         match to_unicode.mapping(hex) {
@@ -370,9 +378,13 @@ fn parse_tounicode(origin: String) -> ToUnicode {
             }
 
             // Parse <srcStart>
-            let Some(src_start) = parse_hex_token(&mut chars, &extract_hex_data) else { break };
+            let Some(src_start) = parse_hex_token(&mut chars, &extract_hex_data) else {
+                break;
+            };
             // Parse <srcEnd>
-            let Some(src_end) = parse_hex_token(&mut chars, &extract_hex_data) else { break };
+            let Some(src_end) = parse_hex_token(&mut chars, &extract_hex_data) else {
+                break;
+            };
 
             // Skip whitespace
             while chars.peek().map_or(false, |c| c.is_whitespace()) {
@@ -394,7 +406,9 @@ fn parse_tounicode(origin: String) -> ToUnicode {
                 chars.next(); // skip ']'
             } else {
                 // Scalar form: <dstStart>
-                let Some(dst_start) = parse_hex_token(&mut chars, &extract_hex_data) else { break };
+                let Some(dst_start) = parse_hex_token(&mut chars, &extract_hex_data) else {
+                    break;
+                };
                 for (i, cid) in (src_start..=src_end).enumerate() {
                     mapping.insert(cid.to_be_bytes(), (dst_start + i as u16).to_be_bytes());
                 }
