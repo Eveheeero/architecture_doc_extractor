@@ -1,7 +1,7 @@
 #![cfg_attr(feature = "pdf_inspector", allow(dead_code))]
 
 #[path = "intel/intel.rs"]
-mod intel;
+pub(crate) mod intel;
 use architecture_doc_extractor::pdf;
 #[cfg(feature = "pdf_inspector")]
 mod pdf_inspector;

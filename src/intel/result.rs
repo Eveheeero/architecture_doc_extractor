@@ -1,28 +1,68 @@
 use std::collections::HashMap;
 
 #[derive(Debug, Default, Clone)]
-pub(super) struct Instruction {
+pub(crate) struct MdTable {
+    pub(crate) headers: Vec<String>,
+    pub(crate) rows: Vec<Vec<String>>,
+}
+
+impl MdTable {
+    pub(crate) fn to_md_lines(&self) -> Vec<String> {
+        if self.headers.is_empty() {
+            return Vec::new();
+        }
+        let mut result = Vec::new();
+        // Header row
+        let header_line = format!("| {} |", self.headers.join(" | "));
+        result.push(header_line);
+        // Separator
+        let sep_line = format!(
+            "| {} |",
+            self.headers
+                .iter()
+                .map(|_| "---".to_owned())
+                .collect::<Vec<_>>()
+                .join(" | ")
+        );
+        result.push(sep_line);
+        // Data rows
+        for row in &self.rows {
+            // Pad row to header length
+            let mut cells: Vec<String> = row.clone();
+            cells.resize(self.headers.len(), String::new());
+            result.push(format!("| {} |", cells.join(" | ")));
+        }
+        result
+    }
+}
+
+#[derive(Debug, Default, Clone)]
+pub(crate) struct Instruction {
     /// 메인 인스트럭션 (AAA)
-    pub(super) title: String,
+    pub(crate) title: String,
     /// 인스트럭션 요약
-    pub(super) summary: String,
-    /// 상세 인스트럭션 별 설명
-    pub(super) _instruction: (String, String),
+    pub(crate) summary: String,
+    /// 인스트럭션 변형별 설명 (인스트럭션 니모닉, 설명)
+    pub(crate) instructions: Vec<(String, String)>,
     /// 상세설명
-    pub(super) description: Vec<String>,
+    pub(crate) description: Vec<String>,
     /// c 가상코드
-    pub(super) operation: String,
+    pub(crate) operation: String,
     /// 영향 받는 플래그
-    pub(super) flag_affected: String,
+    pub(crate) flag_affected: String,
     /// 오류
-    pub(super) exceptions: HashMap<String, Vec<String>>,
+    pub(crate) exceptions: HashMap<String, Vec<String>>,
     /// c/c++ 대체함수
-    pub(super) c_and_cpp_equivalent: Vec<String>,
+    pub(crate) c_and_cpp_equivalent: Vec<String>,
+    /// 기타 섹션 (섹션 이름, 본문 라인) - 등장 순서 유지
+    pub(crate) other_sections: Vec<(String, Vec<String>)>,
+    /// 테이블 (섹션 이름, 테이블)
+    pub(crate) tables: Vec<(String, MdTable)>,
 }
 
 impl Instruction {
     /// Parse instruction name
-    pub(super) fn get_instructions_name(&self) -> Vec<String> {
+    pub(crate) fn get_instructions_name(&self) -> Vec<String> {
         let data = self.title.clone();
 
         if data == "Jcc" {
@@ -132,7 +172,7 @@ impl Instruction {
         result
     }
     /// Instruction to result string
-    pub(super) fn into_md(self) -> Vec<String> {
+    pub(crate) fn into_md(self) -> Vec<String> {
         let mut result = Vec::new();
 
         // 제목
@@ -142,35 +182,60 @@ impl Instruction {
         result.push("".to_owned());
         result.push(format!("{summary}", summary = self.summary));
 
-        // 인스트럭션 별 설명
-        // TODO
+        // 인스트럭션 변형별 설명
+        if !self.instructions.is_empty() {
+            result.push("".to_owned());
+            for (mnemonic, desc) in &self.instructions {
+                result.push(format!("- `{mnemonic}` — {desc}"));
+            }
+        }
 
-        // 문서 하이퍼링크
-        // TODO
+        // 테이블 (Opcode, Instruction Operand Encoding 등)
+        for (section_name, table) in &self.tables {
+            result.push("".to_owned());
+            result.push(format!("## {section_name}"));
+            result.push("".to_owned());
+            result.append(&mut table.to_md_lines());
+        }
 
         // 설명
         let mut description = self.get_description();
         if !description.is_empty() {
             result.push("".to_owned());
+            result.push("## Description".to_owned());
+            result.push("".to_owned());
             result.append(&mut description);
         }
         drop(description);
 
-        // 호환성
-        // TODO
-
-        // 옵코드
-        // TODO
+        // C/C++ Compiler Intrinsic Equivalent
+        if !self.c_and_cpp_equivalent.is_empty() {
+            result.push("".to_owned());
+            result.push("## Intel C/C++ Compiler Intrinsic Equivalent".to_owned());
+            result.push("".to_owned());
+            for line in &self.c_and_cpp_equivalent {
+                result.push(line.clone());
+            }
+        }
 
         // Flags affected
         if !self.flag_affected.is_empty() {
             result.push("".to_owned());
-            result.push("## Flags affected".to_owned());
+            result.push("## Flags Affected".to_owned());
             result.push("".to_owned());
-            result.push(format!(
-                "- {flag_affected}",
-                flag_affected = self.flag_affected
-            ));
+            result.push(self.flag_affected.clone());
+        }
+
+        // 기타 섹션
+        for (name, lines) in &self.other_sections {
+            if !lines.is_empty() {
+                result.push("".to_owned());
+                result.push(format!("## {name}"));
+                result.push("".to_owned());
+                for line in lines {
+                    result.push(line.clone());
+                }
+            }
         }
 
         // 예외
@@ -179,21 +244,16 @@ impl Instruction {
             result.push("## Exceptions".to_owned());
             result.push("".to_owned());
             for (kind, exceptions) in &self.exceptions {
-                result.push(format!("- {kind}"));
+                result.push(format!("### {kind}"));
+                result.push("".to_owned());
                 for exception in exceptions {
-                    if exception.contains('\u{1}') {
-                        let mut iter = exception.split('\u{1}');
-                        let head = iter.next().unwrap().trim().to_owned();
-                        let tail = iter.next().unwrap().trim().to_owned();
-                        result.push(format!("  - {head} - {tail}"));
-                    } else {
-                        result.push(format!("  > {exception}"));
-                    }
+                    result.push(format!("- {exception}"));
                 }
+                result.push("".to_owned());
             }
         }
 
-        // C/C++ 코드
+        // Operation (C pseudocode)
         if !self.operation.is_empty() {
             result.push("".to_owned());
             result.push("## Operation".to_owned());
@@ -203,34 +263,30 @@ impl Instruction {
             result.push("```".to_owned());
         }
 
-        // 대체 함수
-        // TODO
-
         result.push("".to_owned());
-
-        // DEBUG PRINT
-        // result.push("```rust".into());
-        // result.push(format!("{:#?}", self));
-        // result.push("```".into());
-        // result.push("".to_owned());
         result
     }
 
     fn get_description(&self) -> Vec<String> {
-        let mut result = Vec::new();
-        let long = self.description.join("");
-
-        for line in long.split(". ") {
-            result.push(line.to_owned() + ".");
+        if self.description.is_empty() {
+            return Vec::new();
         }
-        result.last_mut().map(|x| {
-            x.pop();
-        });
-
-        result
+        let long = self.description.join(" ");
+        long.split(". ")
+            .map(|s| {
+                let s = s.trim();
+                if s.ends_with('.') {
+                    s.to_owned()
+                } else {
+                    format!("{s}.")
+                }
+            })
+            .collect()
     }
     fn get_reformed_operation(&self) -> Vec<String> {
-        let data = self.operation.clone();
-        [data].into()
+        self.operation
+            .lines()
+            .map(|line| line.to_owned())
+            .collect()
     }
 }

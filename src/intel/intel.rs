@@ -1,6 +1,6 @@
-mod result;
+pub(crate) mod result;
 mod v1;
-mod v2;
+pub(crate) mod v2;
 
 use crate::pdf::{
     self,

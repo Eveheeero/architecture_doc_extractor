@@ -181,7 +181,11 @@ impl<'pdf> PdfFont<'pdf> {
                 let index = c as usize - first_char;
                 widths[index]
             }
-            PdfFont::CidFont { .. } => todo!(),
+            PdfFont::CidFont { .. } => {
+                // CidFont字 uses get_cid_width; fallback to default width
+                tracing::warn!(byte = c, "get_char_width called on CidFont, returning default");
+                0.5
+            }
         }
     }
     pub fn get_cid_width(&self, hex: [u8; 2]) -> f32 {
@@ -196,11 +200,68 @@ impl<'pdf> PdfFont<'pdf> {
         font_ref.h_advance_unscaled(id) / 1000.0
     }
     pub fn get_cid_char(&self, hex: [u8; 2]) -> char {
-        let PdfFont::CidFont { to_unicode, .. } = self else {
+        let PdfFont::CidFont { to_unicode, font_arc, .. } = self else {
             unreachable!()
         };
-        let c = to_unicode.mapping(hex);
-        std::char::from_u32(u16::from_be_bytes(c) as u32).unwrap()
+        match to_unicode.mapping(hex) {
+            Some(c) => std::char::from_u32(u16::from_be_bytes(c) as u32).unwrap_or('\u{FFFD}'),
+            None => {
+                let glyph_id = u16::from_be_bytes(hex);
+                let c = Self::cid_glyph_fallback(font_arc, glyph_id);
+                if c == '\u{FFFD}' {
+                    tracing::debug!(
+                        glyph_id,
+                        tounicode_origin = to_unicode.origin(),
+                        "ToUnicode CMap for unmapped glyph"
+                    );
+                }
+                c
+            }
+        }
+    }
+    /// Reverse-lookup: given a glyph ID, search Unicode codepoints to find which
+    /// character maps to that glyph in the font's cmap table.
+    /// Searches prioritized ranges first (math symbols, Latin, Greek, punctuation)
+    /// then falls back to a broader BMP scan.
+    fn cid_glyph_fallback(font_arc: &ab_glyph::FontArc, glyph_id: u16) -> char {
+        use ab_glyph::Font;
+        let target = ab_glyph::GlyphId(glyph_id);
+
+        // Priority ranges: most likely characters in Intel SDM context
+        let priority_ranges: &[std::ops::RangeInclusive<u32>] = &[
+            0x2200..=0x22FF, // Mathematical Operators (≤, ≥, ≠, ∞, etc.)
+            0x0020..=0x007E, // Basic ASCII
+            0x00A0..=0x00FF, // Latin-1 Supplement (±, ×, ÷, etc.)
+            0x0370..=0x03FF, // Greek and Coptic (α, β, etc.)
+            0x2000..=0x206F, // General Punctuation
+            0x2100..=0x214F, // Letterlike Symbols
+            0x2150..=0x218F, // Number Forms
+            0x0100..=0x024F, // Latin Extended-A/B
+        ];
+        for range in priority_ranges {
+            for code in range.clone() {
+                if let Some(c) = std::char::from_u32(code) {
+                    if font_arc.glyph_id(c) == target {
+                        return c;
+                    }
+                }
+            }
+        }
+
+        // Broader BMP scan for remaining ranges not already covered
+        for code in (0x0250..=0xFFFDu32)
+            .filter(|c| !priority_ranges.iter().any(|r| r.contains(c)))
+            .filter(|&c| !(0xD800..=0xDFFF).contains(&c))
+        {
+            if let Some(c) = std::char::from_u32(code) {
+                if font_arc.glyph_id(c) == target {
+                    return c;
+                }
+            }
+        }
+
+        tracing::warn!(glyph_id, "unmapped CID glyph, no reverse-lookup match");
+        '\u{FFFD}'
     }
     fn get_font_file(&self) -> Vec<u8> {
         match self {
@@ -244,6 +305,28 @@ fn get_font_file<'pdf>(doc: &'pdf Document, font_descripter: &'pdf lopdf::Dictio
     buf
 }
 
+/// Parse a single `<hex>` token from a character iterator, returning the u16 value.
+fn parse_hex_token(
+    chars: &mut std::iter::Peekable<std::str::Chars>,
+    extract: &dyn Fn(&str) -> u16,
+) -> Option<u16> {
+    // Skip whitespace
+    while chars.peek().map_or(false, |c| c.is_whitespace()) {
+        chars.next();
+    }
+    if chars.peek() != Some(&'<') {
+        return None;
+    }
+    let mut token = String::new();
+    for c in chars.by_ref() {
+        token.push(c);
+        if c == '>' {
+            break;
+        }
+    }
+    Some(extract(&token))
+}
+
 fn parse_tounicode(origin: String) -> ToUnicode {
     let mut mapping = std::collections::HashMap::new();
     use itertools::Itertools;
@@ -253,44 +336,69 @@ fn parse_tounicode(origin: String) -> ToUnicode {
         u16::from_str_radix(d, 16).unwrap()
     };
 
-    let beginbfchar = origin.find("beginbfchar").unwrap();
-    let endbfchar = origin.find("endbfchar").unwrap();
-    let bfchar = &origin[beginbfchar..endbfchar];
-    let beginbfrange = origin.find("beginbfrange").unwrap();
-    let endbfrange = origin.find("endbfrange").unwrap();
-    let bfrange = &origin[beginbfrange..endbfrange];
-
-    let mut bfchar = bfchar.split_whitespace();
-    bfchar.next();
-    for mut bfchar in &bfchar.chunks(2) {
-        let f = bfchar.next().unwrap();
-        let f = extract_hex_data(f).to_be_bytes();
-        let t = bfchar.next().unwrap();
-        let t = extract_hex_data(t).to_be_bytes();
-        mapping.insert(f, t);
+    // bfchar section (optional)
+    if let (Some(begin), Some(end)) = (origin.find("beginbfchar"), origin.find("endbfchar")) {
+        let bfchar = &origin[begin..end];
+        let mut bfchar = bfchar.split_whitespace();
+        bfchar.next();
+        for mut bfchar in &bfchar.chunks(2) {
+            let Some(f) = bfchar.next() else { break };
+            let Some(t) = bfchar.next() else { break };
+            let f = extract_hex_data(f).to_be_bytes();
+            let t = extract_hex_data(t).to_be_bytes();
+            mapping.insert(f, t);
+        }
     }
 
-    if bfrange.contains('<') {
-        let (bfrange, range) = bfrange.split_once('<').unwrap();
-        let (range, _) = range.split_once('>').unwrap();
-        let mut bfchar = bfrange.split_whitespace();
-        bfchar.next();
-        for (bfchar, range) in bfchar.zip(range.split_whitespace()) {
-            let f = extract_hex_data(bfchar);
-            let t = extract_hex_data(range);
-            mapping.insert(f.to_be_bytes(), t.to_be_bytes());
-        }
-    } else {
-        let mut bfrange = bfrange.split_whitespace();
-        bfrange.next();
-        let f = bfrange.next().unwrap();
-        let f = extract_hex_data(f);
-        let t = bfrange.next().unwrap();
-        let t = extract_hex_data(t);
-        let e = bfrange.next().unwrap();
-        let e = extract_hex_data(e);
-        for (i, j) in (f..=t).enumerate() {
-            mapping.insert(j.to_be_bytes(), (e + i as u16).to_be_bytes());
+    // bfrange section (optional)
+    // Two forms per entry:
+    //   Scalar: <srcStart> <srcEnd> <dstStart>  → sequential mapping
+    //   Array:  <srcStart> <srcEnd> [<d1> <d2> ...]  → per-CID mapping
+    if let (Some(begin), Some(end)) = (origin.find("beginbfrange"), origin.find("endbfrange")) {
+        let section = &origin[begin..end];
+        // Skip "beginbfrange"
+        let body = &section["beginbfrange".len()..];
+
+        let mut chars = body.chars().peekable();
+        loop {
+            // Skip whitespace
+            while chars.peek().map_or(false, |c| c.is_whitespace()) {
+                chars.next();
+            }
+            if chars.peek().is_none() {
+                break;
+            }
+
+            // Parse <srcStart>
+            let Some(src_start) = parse_hex_token(&mut chars, &extract_hex_data) else { break };
+            // Parse <srcEnd>
+            let Some(src_end) = parse_hex_token(&mut chars, &extract_hex_data) else { break };
+
+            // Skip whitespace
+            while chars.peek().map_or(false, |c| c.is_whitespace()) {
+                chars.next();
+            }
+
+            if chars.peek() == Some(&'[') {
+                // Array form: [<d1> <d2> ...]
+                chars.next(); // skip '['
+                for cid in src_start..=src_end {
+                    if let Some(dst) = parse_hex_token(&mut chars, &extract_hex_data) {
+                        mapping.insert(cid.to_be_bytes(), dst.to_be_bytes());
+                    }
+                }
+                // Skip to closing ']'
+                while chars.peek().map_or(false, |&c| c != ']') {
+                    chars.next();
+                }
+                chars.next(); // skip ']'
+            } else {
+                // Scalar form: <dstStart>
+                let Some(dst_start) = parse_hex_token(&mut chars, &extract_hex_data) else { break };
+                for (i, cid) in (src_start..=src_end).enumerate() {
+                    mapping.insert(cid.to_be_bytes(), (dst_start + i as u16).to_be_bytes());
+                }
+            }
         }
     }
 
@@ -304,7 +412,7 @@ impl ToUnicode {
     pub fn mapping_raw(&self) -> &std::collections::HashMap<[u8; 2], [u8; 2]> {
         &self.mapping
     }
-    pub fn mapping(&self, hex: [u8; 2]) -> [u8; 2] {
-        *self.mapping.get(&hex).unwrap()
+    pub fn mapping(&self, hex: [u8; 2]) -> Option<[u8; 2]> {
+        self.mapping.get(&hex).copied()
     }
 }

@@ -87,3 +87,47 @@ fn extract_page_texts_v2() {
     }
     assert!(true);
 }
+
+#[test]
+fn test_v2_extract_page_129_with_font_scale() {
+    crate::setup_logger();
+    let doc = get_pdf();
+    let page = 129;
+    let strings = crate::pdf::page_to_texts_v2(doc, page);
+    let boxes = crate::pdf::page_to_boxes_v2(doc, page);
+
+    // Verify font_scale is populated
+    for s in &strings {
+        let scale = s.font_scale();
+        assert!(scale > 0.0, "font_scale should be > 0, got {}", scale);
+    }
+
+    // Verify cells detected
+    let mut boxes = boxes;
+    boxes.prepare_cells();
+    let cells = boxes.get_cells();
+    assert!(!cells.is_empty(), "Page 129 should have table cells");
+}
+
+#[test]
+fn test_v2_parse_aaa_instruction() {
+    crate::setup_logger();
+    let doc = get_pdf();
+    // Pages 129-130 contain the AAA instruction
+    let mut data = Vec::new();
+    for page in 129..=130 {
+        let strings = crate::pdf::page_to_texts_v2(doc, page);
+        let boxes = crate::pdf::page_to_boxes_v2(doc, page);
+        data.push((strings, boxes));
+    }
+    let instructions = crate::intel::v2::parse_instructions(data);
+    println!("Parsed {} instructions", instructions.len());
+    for inst in &instructions {
+        let md = inst.clone().into_md();
+        println!("=== {} ===", inst.title);
+        for line in &md {
+            println!("{}", line);
+        }
+    }
+    assert!(!instructions.is_empty(), "Should parse at least one instruction");
+}
