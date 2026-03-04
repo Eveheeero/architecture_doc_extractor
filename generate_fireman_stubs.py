@@ -291,6 +291,108 @@ LOGIC_FLAGS = '&[&sf, &zf, &pf]'
 
 
 # ============================================================
+# Section 2b: ARM (AArch64) Register & Operand Maps
+# ============================================================
+
+def _build_arm_registers() -> tuple[dict[str, str], dict[str, str]]:
+    """Build ARM AArch64 register → IR mapping."""
+    reg_ir: dict[str, str] = {}
+    reg_size: dict[str, str] = {}
+
+    # General purpose X0-X30 (64-bit)
+    for i in range(31):
+        reg_ir[f'X{i}'] = f'x{i}.clone()'
+        reg_size[f'X{i}'] = f'size_relative(x{i}.clone())'
+
+    # General purpose W0-W30 (32-bit, lower half of X)
+    for i in range(31):
+        reg_ir[f'W{i}'] = f'w{i}.clone()'
+        reg_size[f'W{i}'] = f'size_relative(w{i}.clone())'
+
+    # SP / WSP
+    reg_ir['SP'] = 'sp.clone()'
+    reg_size['SP'] = 'size_relative(sp.clone())'
+    reg_ir['WSP'] = 'wsp.clone()'
+    reg_size['WSP'] = 'size_relative(wsp.clone())'
+
+    # PC
+    reg_ir['PC'] = 'pc.clone()'
+    reg_size['PC'] = 'size_relative(pc.clone())'
+
+    # Zero registers
+    reg_ir['XZR'] = 'xzr.clone()'
+    reg_size['XZR'] = 'size_relative(xzr.clone())'
+    reg_ir['WZR'] = 'wzr.clone()'
+    reg_size['WZR'] = 'size_relative(wzr.clone())'
+
+    # LR = X30 alias
+    reg_ir['LR'] = 'x30.clone()'
+    reg_size['LR'] = 'size_relative(x30.clone())'
+
+    # SIMD/FP registers V0-V31 with width views
+    for i in range(32):
+        for prefix in ['V', 'Q', 'D', 'S', 'H', 'B']:
+            name = f'{prefix}{i}'
+            reg_ir[name] = f'{name.lower()}.clone()'
+            reg_size[name] = f'size_relative({name.lower()}.clone())'
+
+    # PSTATE flags (N, Z, C, V)
+    for flag in ['N', 'Z', 'C', 'V']:
+        reg_ir[f'PSTATE_{flag}'] = f'pstate_{flag.lower()}.clone()'
+        reg_size[f'PSTATE_{flag}'] = f'size_relative(pstate_{flag.lower()}.clone())'
+
+    return reg_ir, reg_size
+
+
+ARM_REGISTER_IR, ARM_REGISTER_SIZE = _build_arm_registers()
+
+# ARM pseudocode register-access patterns → IR operand
+# X[d]/W[d]/V[d] = destination (o1), X[n]/W[n]/V[n] = src1 (o2),
+# X[m]/W[m]/V[m] = src2 (o3), X[t]/W[t]/V[t] = transfer reg (o1),
+# X[s]/W[s] = store-data reg (o2), X[a]/V[a] = accumulator (o3)
+ARM_PSEUDOCODE_REGS: dict[str, str] = {
+    'X[d]': 'o1()', 'W[d]': 'o1()', 'V[d]': 'o1()',
+    'X[n]': 'o2()', 'W[n]': 'o2()', 'V[n]': 'o2()',
+    'X[m]': 'o3()', 'W[m]': 'o3()', 'V[m]': 'o3()',
+    'X[t]': 'o1()', 'W[t]': 'o1()', 'V[t]': 'o1()',
+    'X[s]': 'o2()', 'W[s]': 'o2()',
+    'X[a]': 'o3()', 'V[a]': 'o3()',
+}
+
+ARM_PSEUDOCODE_SIZES: dict[str, str] = {
+    'X[d]': 'o1_size()', 'W[d]': 'o1_size()', 'V[d]': 'o1_size()',
+    'X[n]': 'o2_size()', 'W[n]': 'o2_size()', 'V[n]': 'o2_size()',
+    'X[m]': 'o3_size()', 'W[m]': 'o3_size()', 'V[m]': 'o3_size()',
+    'X[t]': 'o1_size()', 'W[t]': 'o1_size()', 'V[t]': 'o1_size()',
+    'X[s]': 'o2_size()', 'W[s]': 'o2_size()',
+    'X[a]': 'o3_size()', 'V[a]': 'o3_size()',
+}
+
+# ARM condition codes (for b.eq, b.ne, csel, etc.)
+ARM_CONDITION_CODES: dict[str, str] = {
+    'eq': 'pstate_z.clone()',
+    'ne': 'u::not(pstate_z.clone())',
+    'cs': 'pstate_c.clone()',
+    'hs': 'pstate_c.clone()',
+    'cc': 'u::not(pstate_c.clone())',
+    'lo': 'u::not(pstate_c.clone())',
+    'mi': 'pstate_n.clone()',
+    'pl': 'u::not(pstate_n.clone())',
+    'vs': 'pstate_v.clone()',
+    'vc': 'u::not(pstate_v.clone())',
+    'hi': 'b::and(pstate_c.clone(), u::not(pstate_z.clone()))',
+    'ls': 'b::or(u::not(pstate_c.clone()), pstate_z.clone())',
+    'ge': 'b::equal(pstate_n.clone(), pstate_v.clone(), size_relative(pstate_n.clone()))',
+    'lt': 'u::not(b::equal(pstate_n.clone(), pstate_v.clone(), size_relative(pstate_n.clone())))',
+    'gt': 'b::and(u::not(pstate_z.clone()), b::equal(pstate_n.clone(), pstate_v.clone(), size_relative(pstate_n.clone())))',
+    'le': 'b::or(pstate_z.clone(), u::not(b::equal(pstate_n.clone(), pstate_v.clone(), size_relative(pstate_n.clone()))))',
+    'al': 'c(1)',
+}
+
+ARM_NZCV_FLAGS = '&[&pstate_n, &pstate_z, &pstate_c, &pstate_v]'
+
+
+# ============================================================
 # Section 3: Pseudocode Tokenizer & Parser
 # ============================================================
 
@@ -1838,6 +1940,813 @@ _build_templates()
 
 
 # ============================================================
+# Section 5b: ARM Templates
+# ============================================================
+
+ARM_TEMPLATES: dict[str, list[str]] = {}
+
+
+def _build_arm_templates():
+    """Build ARM instruction template registry."""
+    global ARM_TEMPLATES
+
+    # --- Arithmetic (2-operand and 3-operand forms) ---
+    # ADD Xd, Xn, Xm  →  o1 = o2 + o3
+    ARM_TEMPLATES['add'] = [
+        '    let assignment = assign(b::add(o2(), o3()), o1(), o1_size());',
+        '    [assignment].into()',
+    ]
+    ARM_TEMPLATES['sub'] = [
+        '    let assignment = assign(b::sub(o2(), o3()), o1(), o1_size());',
+        '    [assignment].into()',
+    ]
+    ARM_TEMPLATES['neg'] = [
+        '    let assignment = assign(u::neg(o2()), o1(), o1_size());',
+        '    [assignment].into()',
+    ]
+    ARM_TEMPLATES['mul'] = [
+        '    let assignment = assign(b::mul(o2(), o3()), o1(), o1_size());',
+        '    [assignment].into()',
+    ]
+    ARM_TEMPLATES['madd'] = [
+        '    let assignment = assign(b::add(o4(), b::mul(o2(), o3())), o1(), o1_size());',
+        '    [assignment].into()',
+    ]
+    ARM_TEMPLATES['msub'] = [
+        '    let assignment = assign(b::sub(o4(), b::mul(o2(), o3())), o1(), o1_size());',
+        '    [assignment].into()',
+    ]
+    ARM_TEMPLATES['mneg'] = [
+        '    let assignment = assign(u::neg(b::mul(o2(), o3())), o1(), o1_size());',
+        '    [assignment].into()',
+    ]
+    ARM_TEMPLATES['udiv'] = [
+        '    let assignment = assign(b::unsigned_div(o2(), o3()), o1(), o1_size());',
+        '    [assignment].into()',
+    ]
+    ARM_TEMPLATES['sdiv'] = [
+        '    let assignment = assign(b::signed_div(o2(), o3()), o1(), o1_size());',
+        '    [assignment].into()',
+    ]
+    ARM_TEMPLATES['smull'] = [
+        '    let assignment = assign(b::mul(o2(), o3()), o1(), o1_size());',
+        '    [assignment].into()',
+    ]
+    ARM_TEMPLATES['umull'] = ARM_TEMPLATES['smull']
+    ARM_TEMPLATES['smulh'] = [f'    [exception("smulh")].into()']  # high 64 bits of 128-bit product
+    ARM_TEMPLATES['umulh'] = [f'    [exception("umulh")].into()']  # high 64 bits of 128-bit product
+    ARM_TEMPLATES['smaddl'] = ARM_TEMPLATES['madd']
+    ARM_TEMPLATES['umaddl'] = ARM_TEMPLATES['madd']
+    ARM_TEMPLATES['smsubl'] = ARM_TEMPLATES['msub']
+    ARM_TEMPLATES['umsubl'] = ARM_TEMPLATES['msub']
+    ARM_TEMPLATES['smnegl'] = ARM_TEMPLATES['mneg']
+    ARM_TEMPLATES['umnegl'] = ARM_TEMPLATES['mneg']
+
+    # ADC/SBC (with carry)
+    ARM_TEMPLATES['adc'] = [
+        '    let op = b::add(b::add(o2(), o3()), pstate_c.clone());',
+        '    let assignment = assign(op, o1(), o1_size());',
+        '    [assignment].into()',
+    ]
+    ARM_TEMPLATES['sbc'] = [
+        '    let op = b::sub(b::sub(o2(), o3()), u::not(pstate_c.clone()));',
+        '    let assignment = assign(op, o1(), o1_size());',
+        '    [assignment].into()',
+    ]
+
+    # ADDS/SUBS (with flag setting)
+    ARM_TEMPLATES['adds'] = [
+        '    let op = b::add(o2(), o3());',
+        '    let assignment = assign(op.clone(), o1(), o1_size());',
+        f'    let calc_flags = calc_flags_automatically(op, o1_size(), {ARM_NZCV_FLAGS});',
+        '    [calc_flags, assignment].into()',
+    ]
+    ARM_TEMPLATES['subs'] = [
+        '    let op = b::sub(o2(), o3());',
+        '    let assignment = assign(op.clone(), o1(), o1_size());',
+        f'    let calc_flags = calc_flags_automatically(op, o1_size(), {ARM_NZCV_FLAGS});',
+        '    [calc_flags, assignment].into()',
+    ]
+    ARM_TEMPLATES['adcs'] = [
+        '    let op = b::add(b::add(o2(), o3()), pstate_c.clone());',
+        '    let assignment = assign(op.clone(), o1(), o1_size());',
+        f'    let calc_flags = calc_flags_automatically(op, o1_size(), {ARM_NZCV_FLAGS});',
+        '    [calc_flags, assignment].into()',
+    ]
+    ARM_TEMPLATES['sbcs'] = [
+        '    let op = b::sub(b::sub(o2(), o3()), u::not(pstate_c.clone()));',
+        '    let assignment = assign(op.clone(), o1(), o1_size());',
+        f'    let calc_flags = calc_flags_automatically(op, o1_size(), {ARM_NZCV_FLAGS});',
+        '    [calc_flags, assignment].into()',
+    ]
+    ARM_TEMPLATES['ngc'] = ARM_TEMPLATES['sbc']
+    ARM_TEMPLATES['ngcs'] = ARM_TEMPLATES['sbcs']
+    ARM_TEMPLATES['negs'] = [
+        '    let op = u::neg(o2());',
+        '    let assignment = assign(op.clone(), o1(), o1_size());',
+        f'    let calc_flags = calc_flags_automatically(op, o1_size(), {ARM_NZCV_FLAGS});',
+        '    [calc_flags, assignment].into()',
+    ]
+
+    # --- Logical ---
+    ARM_TEMPLATES['and'] = [
+        '    let assignment = assign(b::and(o2(), o3()), o1(), o1_size());',
+        '    [assignment].into()',
+    ]
+    ARM_TEMPLATES['orr'] = [
+        '    let assignment = assign(b::or(o2(), o3()), o1(), o1_size());',
+        '    [assignment].into()',
+    ]
+    ARM_TEMPLATES['eor'] = [
+        '    let assignment = assign(b::xor(o2(), o3()), o1(), o1_size());',
+        '    [assignment].into()',
+    ]
+    ARM_TEMPLATES['eon'] = [
+        '    let assignment = assign(b::xor(o2(), u::not(o3())), o1(), o1_size());',
+        '    [assignment].into()',
+    ]
+    ARM_TEMPLATES['orn'] = [
+        '    let assignment = assign(b::or(o2(), u::not(o3())), o1(), o1_size());',
+        '    [assignment].into()',
+    ]
+    ARM_TEMPLATES['bic'] = [
+        '    let assignment = assign(b::and(o2(), u::not(o3())), o1(), o1_size());',
+        '    [assignment].into()',
+    ]
+    ARM_TEMPLATES['bics'] = [
+        '    let op = b::and(o2(), u::not(o3()));',
+        '    let assignment = assign(op.clone(), o1(), o1_size());',
+        f'    let calc_flags = calc_flags_automatically(op, o1_size(), {ARM_NZCV_FLAGS});',
+        '    [calc_flags, assignment].into()',
+    ]
+    ARM_TEMPLATES['ands'] = [
+        '    let op = b::and(o2(), o3());',
+        '    let assignment = assign(op.clone(), o1(), o1_size());',
+        f'    let calc_flags = calc_flags_automatically(op, o1_size(), {ARM_NZCV_FLAGS});',
+        '    [calc_flags, assignment].into()',
+    ]
+    ARM_TEMPLATES['mvn'] = [
+        '    let assignment = assign(u::not(o2()), o1(), o1_size());',
+        '    [assignment].into()',
+    ]
+    ARM_TEMPLATES['tst'] = [
+        '    let op = b::and(o1(), o2());',
+        f'    let calc_flags = calc_flags_automatically(op, o1_size(), {ARM_NZCV_FLAGS});',
+        '    [calc_flags].into()',
+    ]
+
+    # --- Shifts ---
+    ARM_TEMPLATES['lsl'] = [
+        '    let assignment = assign(b::shl(o2(), o3()), o1(), o1_size());',
+        '    [assignment].into()',
+    ]
+    ARM_TEMPLATES['lsr'] = [
+        '    let assignment = assign(b::shr(o2(), o3()), o1(), o1_size());',
+        '    [assignment].into()',
+    ]
+    ARM_TEMPLATES['asr'] = [
+        '    let assignment = assign(b::sar(o2(), o3()), o1(), o1_size());',
+        '    [assignment].into()',
+    ]
+    ARM_TEMPLATES['ror'] = [
+        '    let op = b::or(b::shr(o2(), o3()), b::shl(o2(), b::sub(bit_size_of_o2(), o3())));',
+        '    let assignment = assign(op, o1(), o1_size());',
+        '    [assignment].into()',
+    ]
+    ARM_TEMPLATES['lslv'] = ARM_TEMPLATES['lsl']
+    ARM_TEMPLATES['lsrv'] = ARM_TEMPLATES['lsr']
+    ARM_TEMPLATES['asrv'] = ARM_TEMPLATES['asr']
+    ARM_TEMPLATES['rorv'] = ARM_TEMPLATES['ror']
+
+    # --- Data movement ---
+    ARM_TEMPLATES['mov'] = [
+        '    let assignment = assign(o2(), o1(), o1_size());',
+        '    [assignment].into()',
+    ]
+    ARM_TEMPLATES['movz'] = ARM_TEMPLATES['mov']
+    ARM_TEMPLATES['movn'] = [
+        '    let assignment = assign(u::not(o2()), o1(), o1_size());',
+        '    [assignment].into()',
+    ]
+    ARM_TEMPLATES['movk'] = ARM_TEMPLATES['mov']
+    ARM_TEMPLATES['sxtb'] = [
+        '    let assignment = sign_extend(o2(), o1(), o1_size());',
+        '    [assignment].into()',
+    ]
+    ARM_TEMPLATES['sxth'] = ARM_TEMPLATES['sxtb']
+    ARM_TEMPLATES['sxtw'] = ARM_TEMPLATES['sxtb']
+    ARM_TEMPLATES['uxtb'] = ARM_TEMPLATES['mov']
+    ARM_TEMPLATES['uxth'] = ARM_TEMPLATES['mov']
+
+    # --- Compare ---
+    ARM_TEMPLATES['cmp'] = [
+        '    let sub = b::sub(o1(), o2());',
+        f'    let calc_flags = calc_flags_automatically(sub, o1_size(), {ARM_NZCV_FLAGS});',
+        '    [calc_flags].into()',
+    ]
+    ARM_TEMPLATES['cmn'] = [
+        '    let add = b::add(o1(), o2());',
+        f'    let calc_flags = calc_flags_automatically(add, o1_size(), {ARM_NZCV_FLAGS});',
+        '    [calc_flags].into()',
+    ]
+    ARM_TEMPLATES['ccmp'] = ARM_TEMPLATES['cmp']
+    ARM_TEMPLATES['ccmn'] = ARM_TEMPLATES['cmn']
+
+    # --- Conditional select ---
+    # Uses condition() IR primitive with o3() as the condition operand.
+    # CSEL: if cond then Xn else Xm
+    ARM_TEMPLATES['csel'] = [
+        '    [condition(o3(), [assign(o1(), o1(), o1_size())], [assign(o2(), o1(), o1_size())])].into()',
+    ]
+    # CSINC: if cond then Xn else Xm+1
+    ARM_TEMPLATES['csinc'] = [
+        '    [condition(o3(), [assign(o1(), o1(), o1_size())], [assign(b::add(o2(), c(1)), o1(), o1_size())])].into()',
+    ]
+    # CSINV: if cond then Xn else NOT(Xm)
+    ARM_TEMPLATES['csinv'] = [
+        '    [condition(o3(), [assign(o1(), o1(), o1_size())], [assign(u::not(o2()), o1(), o1_size())])].into()',
+    ]
+    # CSNEG: if cond then Xn else -Xm
+    ARM_TEMPLATES['csneg'] = [
+        '    [condition(o3(), [assign(o1(), o1(), o1_size())], [assign(u::neg(o2()), o1(), o1_size())])].into()',
+    ]
+    # CSET: if cond then 1 else 0
+    ARM_TEMPLATES['cset'] = [
+        '    [condition(o2(), [assign(c(1), o1(), o1_size())], [assign(c(0), o1(), o1_size())])].into()',
+    ]
+    # CSETM: if cond then ~0 else 0
+    ARM_TEMPLATES['csetm'] = [
+        '    [condition(o2(), [assign(u::not(c(0)), o1(), o1_size())], [assign(c(0), o1(), o1_size())])].into()',
+    ]
+    # CINC/CINV/CNEG are aliases
+    ARM_TEMPLATES['cinc'] = ARM_TEMPLATES['csinc']
+    ARM_TEMPLATES['cinv'] = ARM_TEMPLATES['csinv']
+    ARM_TEMPLATES['cneg'] = ARM_TEMPLATES['csneg']
+
+    # --- Bit manipulation (complex ops → exception since not representable in simple IR) ---
+    for _op in ['cls', 'clz', 'rbit', 'rev', 'rev16', 'rev32', 'rev64',
+                'bfm', 'ubfm', 'sbfm', 'ubfx', 'sbfx', 'ubfiz', 'sbfiz', 'bfi', 'bfxil']:
+        ARM_TEMPLATES[_op] = [f'    [exception("{_op}")].into()']
+    ARM_TEMPLATES['extr'] = [
+        '    let assignment = assign(o3(), o1(), o1_size());',
+        '    [assignment].into()',
+    ]
+
+    # --- Control flow ---
+    ARM_TEMPLATES['b'] = ['    [jump(o1())].into()']
+    ARM_TEMPLATES['bl'] = [
+        '    let save_lr = assign(b::add(pc.clone(), instruction_byte_size()), x30.clone(), size_relative(x30.clone()));',
+        '    let do_jump = jump(o1());',
+        '    [save_lr, do_jump].into()',
+    ]
+    ARM_TEMPLATES['blr'] = ARM_TEMPLATES['bl']
+    ARM_TEMPLATES['br'] = ['    [jump(o1())].into()']
+    ARM_TEMPLATES['ret'] = ['    [jump(x30.clone())].into()']
+    ARM_TEMPLATES['nop'] = ['    [].into()']
+    ARM_TEMPLATES['hint'] = ['    [].into()']
+
+    # --- Conditional branch on register ---
+    ARM_TEMPLATES['cbz'] = [
+        '    let fallthrough = b::add(pc.clone(), instruction_byte_size());',
+        '    [condition(b::equal(o1(), c(0), o1_size()), [jump(o2())], [jump(fallthrough)])].into()',
+    ]
+    ARM_TEMPLATES['cbnz'] = [
+        '    let fallthrough = b::add(pc.clone(), instruction_byte_size());',
+        '    let is_zero = b::equal(o1(), c(0), o1_size());',
+        '    [condition(u::not(is_zero), [jump(o2())], [jump(fallthrough)])].into()',
+    ]
+    # --- Conditional branch on bit (test bit via shift+mask, following Intel BT pattern) ---
+    ARM_TEMPLATES['tbz'] = [
+        '    let fallthrough = b::add(pc.clone(), instruction_byte_size());',
+        '    let bit = b::and(b::shr(o1(), o2()), c(1));',
+        '    [condition(b::equal(bit, c(0), o1_size()), [jump(o3())], [jump(fallthrough)])].into()',
+    ]
+    ARM_TEMPLATES['tbnz'] = [
+        '    let fallthrough = b::add(pc.clone(), instruction_byte_size());',
+        '    let bit = b::and(b::shr(o1(), o2()), c(1));',
+        '    [condition(bit, [jump(o3())], [jump(fallthrough)])].into()',
+    ]
+
+    # --- PSTATE direct manipulation (snapshot originals to avoid read-after-write) ---
+    ARM_TEMPLATES['axflag'] = [
+        '    let old_z = pstate_z.clone();',
+        '    let old_c = pstate_c.clone();',
+        '    let old_v = pstate_v.clone();',
+        '    let set_n = assign(c(0), pstate_n.clone(), size_relative(pstate_n.clone()));',
+        '    let set_z = assign(b::or(old_z.clone(), old_v.clone()), pstate_z.clone(), size_relative(pstate_z.clone()));',
+        '    let set_c = assign(b::and(old_c, u::not(old_v)), pstate_c.clone(), size_relative(pstate_c.clone()));',
+        '    let set_v = assign(c(0), pstate_v.clone(), size_relative(pstate_v.clone()));',
+        '    [set_n, set_z, set_c, set_v].into()',
+    ]
+    ARM_TEMPLATES['xaflag'] = [
+        '    let old_c = pstate_c.clone();',
+        '    let old_z = pstate_z.clone();',
+        '    let set_n = assign(b::and(u::not(old_c.clone()), u::not(old_z.clone())), pstate_n.clone(), size_relative(pstate_n.clone()));',
+        '    let set_z = assign(b::and(old_z.clone(), old_c.clone()), pstate_z.clone(), size_relative(pstate_z.clone()));',
+        '    let set_c = assign(b::or(old_c.clone(), old_z.clone()), pstate_c.clone(), size_relative(pstate_c.clone()));',
+        '    let set_v = assign(b::and(u::not(old_c.clone()), old_z.clone()), pstate_v.clone(), size_relative(pstate_v.clone()));',
+        '    [set_n, set_z, set_c, set_v].into()',
+    ]
+
+    # --- SUBP/SUBPS: AddWithCarry(op1, NOT(op2), '1') = subtraction ---
+    ARM_TEMPLATES['subp'] = [
+        '    let assignment = assign(b::sub(o2(), o3()), o1(), o1_size());',
+        '    [assignment].into()',
+    ]
+    ARM_TEMPLATES['subps'] = [
+        '    let op = b::sub(o2(), o3());',
+        '    let assignment = assign(op.clone(), o1(), o1_size());',
+        f'    let calc_flags = calc_flags_automatically(op, o1_size(), {ARM_NZCV_FLAGS});',
+        '    [calc_flags, assignment].into()',
+    ]
+
+    # --- Load/Store (simplified: treat as mov) ---
+    ARM_TEMPLATES['ldr'] = ARM_TEMPLATES['mov']
+    ARM_TEMPLATES['ldrb'] = ARM_TEMPLATES['mov']
+    ARM_TEMPLATES['ldrh'] = ARM_TEMPLATES['mov']
+    ARM_TEMPLATES['ldrsb'] = ARM_TEMPLATES['sxtb']
+    ARM_TEMPLATES['ldrsh'] = ARM_TEMPLATES['sxtb']
+    ARM_TEMPLATES['ldrsw'] = ARM_TEMPLATES['sxtb']
+    ARM_TEMPLATES['ldp'] = ARM_TEMPLATES['mov']
+    ARM_TEMPLATES['str'] = [
+        '    let assignment = assign(o1(), o2(), o2_size());',
+        '    [assignment].into()',
+    ]
+    ARM_TEMPLATES['strb'] = ARM_TEMPLATES['str']
+    ARM_TEMPLATES['strh'] = ARM_TEMPLATES['str']
+    ARM_TEMPLATES['stp'] = ARM_TEMPLATES['str']
+    ARM_TEMPLATES['ldar'] = ARM_TEMPLATES['mov']
+    ARM_TEMPLATES['stlr'] = ARM_TEMPLATES['str']
+    ARM_TEMPLATES['ldxr'] = ARM_TEMPLATES['mov']
+    ARM_TEMPLATES['stxr'] = ARM_TEMPLATES['str']
+    ARM_TEMPLATES['ldaxr'] = ARM_TEMPLATES['mov']
+    ARM_TEMPLATES['stlxr'] = ARM_TEMPLATES['str']
+    ARM_TEMPLATES['ldur'] = ARM_TEMPLATES['mov']
+    ARM_TEMPLATES['stur'] = ARM_TEMPLATES['str']
+    # Additional load/store variants (acquire/release/exclusive byte/half)
+    ARM_TEMPLATES['ldarb'] = ARM_TEMPLATES['mov']
+    ARM_TEMPLATES['ldarh'] = ARM_TEMPLATES['mov']
+    ARM_TEMPLATES['ldaxrb'] = ARM_TEMPLATES['mov']
+    ARM_TEMPLATES['ldaxrh'] = ARM_TEMPLATES['mov']
+    ARM_TEMPLATES['stlrb'] = ARM_TEMPLATES['str']
+    ARM_TEMPLATES['stlrh'] = ARM_TEMPLATES['str']
+    ARM_TEMPLATES['stlxrb'] = ARM_TEMPLATES['str']
+    ARM_TEMPLATES['stlxrh'] = ARM_TEMPLATES['str']
+    ARM_TEMPLATES['ldurb'] = ARM_TEMPLATES['mov']
+    ARM_TEMPLATES['ldurh'] = ARM_TEMPLATES['mov']
+    ARM_TEMPLATES['ldursb'] = ARM_TEMPLATES['sxtb']
+    ARM_TEMPLATES['ldursh'] = ARM_TEMPLATES['sxtb']
+    ARM_TEMPLATES['ldursw'] = ARM_TEMPLATES['sxtb']
+
+    # --- Address generation ---
+    ARM_TEMPLATES['adr'] = [
+        '    let assignment = assign(b::add(pc.clone(), o2()), o1(), o1_size());',
+        '    [assignment].into()',
+    ]
+    ARM_TEMPLATES['adrp'] = [
+        '    let page_base = b::and(pc.clone(), u::not(c(0xFFF)));',
+        '    let assignment = assign(b::add(page_base, o2()), o1(), o1_size());',
+        '    [assignment].into()',
+    ]
+
+    # --- Barriers / NOP-like (prefetch hints are no-ops for analysis) ---
+    for _op in ['dmb', 'dsb', 'isb', 'csdb', 'yield_', 'wfe', 'wfi', 'sev', 'sevl',
+                'clrex', 'pssbb', 'ssbb', 'esb', 'psb', 'tsb',
+                'prfm', 'prfum']:
+        ARM_TEMPLATES[_op] = ['    [].into()']
+
+    # --- System / Exception stubs ---
+    for _op in ['svc', 'hvc', 'smc', 'brk', 'hlt', 'dcps1', 'dcps2', 'dcps3',
+                'drps', 'eret', 'mrs', 'msr', 'sys', 'sysl',
+                'at', 'dc', 'ic', 'tlbi',
+                'cas', 'casa', 'casl', 'casal',
+                'casb', 'cash', 'casp',
+                'swp', 'swpa', 'swpl', 'swpal',
+                'swpb', 'swph',
+                'ldadd', 'ldadda', 'ldaddl', 'ldaddal',
+                'ldclr', 'ldclra', 'ldclrl', 'ldclral',
+                'ldeor', 'ldeora', 'ldeorl', 'ldeoral',
+                'ldset', 'ldseta', 'ldsetl', 'ldsetal',
+                'ldsmax', 'ldsmin', 'ldumax', 'ldumin',
+                'stadd', 'staddl', 'stclr', 'stclrl',
+                'steor', 'steorl', 'stset', 'stsetl']:
+        ARM_TEMPLATES[_op] = [f'    [exception("{_op}")].into()']
+
+    # --- SIMD/FP data processing (common patterns) ---
+    # Vector arithmetic: add, sub, mul per element
+    _simd_arith = {
+        'fadd': 'b::add', 'fsub': 'b::sub', 'fmul': 'b::mul',
+        'fdiv': 'b::unsigned_div', 'fneg': 'u::neg', 'fabs': 'o2',
+        'fmadd': None, 'fmsub': None, 'fnmadd': None, 'fnmsub': None,
+    }
+    for _op, _ir in _simd_arith.items():
+        if _ir is None:
+            continue
+        if _ir.startswith('u::') or _ir == 'o2':
+            # unary
+            _expr = f'{_ir}()' if _ir == 'o2' else f'{_ir}(o2())'
+            ARM_TEMPLATES[_op] = [
+                f'    let assignment = assign({_expr}, o1(), o1_size());',
+                '    [assignment].into()',
+            ]
+        else:
+            ARM_TEMPLATES[_op] = [
+                f'    let assignment = assign({_ir}(o2(), o3()), o1(), o1_size());',
+                '    [assignment].into()',
+            ]
+    ARM_TEMPLATES['fmadd'] = [
+        '    let assignment = assign(b::add(b::mul(o2(), o3()), o4()), o1(), o1_size());',
+        '    [assignment].into()',
+    ]
+    ARM_TEMPLATES['fmsub'] = [
+        '    let assignment = assign(b::sub(b::mul(o2(), o3()), o4()), o1(), o1_size());',
+        '    [assignment].into()',
+    ]
+    ARM_TEMPLATES['fnmadd'] = [
+        '    let assignment = assign(u::neg(b::add(b::mul(o2(), o3()), o4())), o1(), o1_size());',
+        '    [assignment].into()',
+    ]
+    ARM_TEMPLATES['fnmsub'] = [
+        '    let assignment = assign(b::sub(o4(), b::mul(o2(), o3())), o1(), o1_size());',
+        '    [assignment].into()',
+    ]
+    ARM_TEMPLATES['fmov'] = ARM_TEMPLATES['mov']
+    ARM_TEMPLATES['fcmp'] = ARM_TEMPLATES['cmp']
+    ARM_TEMPLATES['fccmp'] = ARM_TEMPLATES['cmp']
+    ARM_TEMPLATES['fcsel'] = [
+        '    let assignment = assign(o2(), o1(), o1_size());',
+        '    [assignment].into()',
+    ]
+    ARM_TEMPLATES['fcvt'] = ARM_TEMPLATES['mov']
+    ARM_TEMPLATES['fcvtzs'] = ARM_TEMPLATES['mov']
+    ARM_TEMPLATES['fcvtzu'] = ARM_TEMPLATES['mov']
+    ARM_TEMPLATES['scvtf'] = ARM_TEMPLATES['mov']
+    ARM_TEMPLATES['ucvtf'] = ARM_TEMPLATES['mov']
+    ARM_TEMPLATES['fsqrt'] = [
+        '    let assignment = assign(o2(), o1(), o1_size());',
+        '    [assignment].into()',
+    ]
+    ARM_TEMPLATES['fmin'] = ARM_TEMPLATES['fadd']
+    ARM_TEMPLATES['fmax'] = ARM_TEMPLATES['fadd']
+    ARM_TEMPLATES['fminnm'] = ARM_TEMPLATES['fadd']
+    ARM_TEMPLATES['fmaxnm'] = ARM_TEMPLATES['fadd']
+    ARM_TEMPLATES['frinta'] = ARM_TEMPLATES['fsqrt']
+    ARM_TEMPLATES['frinti'] = ARM_TEMPLATES['fsqrt']
+    ARM_TEMPLATES['frintm'] = ARM_TEMPLATES['fsqrt']
+    ARM_TEMPLATES['frintn'] = ARM_TEMPLATES['fsqrt']
+    ARM_TEMPLATES['frintp'] = ARM_TEMPLATES['fsqrt']
+    ARM_TEMPLATES['frintx'] = ARM_TEMPLATES['fsqrt']
+    ARM_TEMPLATES['frintz'] = ARM_TEMPLATES['fsqrt']
+
+    # ADDG/SUBG (memory tagging) → exception
+    ARM_TEMPLATES['addg'] = [f'    [exception("addg")].into()']
+    ARM_TEMPLATES['subg'] = [f'    [exception("subg")].into()']
+
+
+_build_arm_templates()
+
+
+# ============================================================
+# Section 5c: ARM Pseudocode Translator
+# ============================================================
+
+# Lines to skip in ARM pseudocode (function calls that are checks, not computation)
+_ARM_SKIP_PATTERNS = [
+    'CheckFPAdvSIMDEnabled64',
+    'CheckFPEnabled64',
+    'CheckSVEEnabled',
+    'CheckSVEAndSMEnabled',
+    'CheckSMEEnabled',
+    'CheckSMEAndZAEnabled',
+    'AArch64.CheckFPAdvSIMDEnabled',
+    'SetTagCheckedInstruction',
+    'boolean',
+    'integer d =',
+    'integer n =',
+    'integer m =',
+    'integer t =',
+    'integer s =',
+    'integer a =',
+    'integer datasize',
+    'integer esize',
+    'integer elements',
+    'integer regsize',
+    'integer pairs',
+    'integer part',
+    'constant integer',
+    'bits(datasize) result;',
+    'bits(datasize) operand',
+    'bits(esize)',
+    'bits(4) nzcv',
+    'boolean sub_op',
+    'boolean setflags',
+    'boolean unsigned',
+    'boolean neg ',
+    'boolean pair',
+    'boolean replicate',
+    'boolean is_neg',
+    'ShiftType shift_type',
+    'LogicalOp op ',
+    'MoveWideOp opcode',
+    'CountOp opcode',
+    'ReduceOp op',
+    'CompareOp op ',
+    'FPMaxMinOp op',
+    'FPUnaryOp fpop',
+    'FPConvOp fpop',
+    'BranchType branch_type',
+    'AccType acctype',
+    'bit carry_in',
+    'bit sub_op',
+]
+
+# ARM pseudocode binary operators → IR
+_ARM_BINOP_MAP = {
+    'AND': 'b::and',
+    'OR': 'b::or',
+    'EOR': 'b::xor',
+    'MOD': 'b::unsigned_mod',
+    'DIV': 'b::unsigned_div',
+    '+': 'b::add',
+    '-': 'b::sub',
+    '*': 'b::mul',
+}
+
+
+def _arm_classify_unsupported(operation: str) -> str | None:
+    """Classify why an ARM operation cannot be translated. Returns reason or None if translatable."""
+    lines = operation.strip().split('\n')
+    clean = [l.strip() for l in lines if l.strip()]
+
+    has_for = any(l.startswith('for ') or l.startswith('FOR ') for l in clean)
+    has_while = any(l.startswith('while ') or l.startswith('WHILE ') for l in clean)
+    has_elem = any('Elem[' in l for l in clean)
+    has_mem = any('Mem[' in l or 'Mem(' in l for l in clean)
+    has_complex_fn = any(fn in operation for fn in [
+        'AArch64.', 'Poly', 'CRC', 'SHA', 'AES', 'SM3', 'SM4',
+        'FPToFixed', 'FixedToFP', 'FPCompare', 'FPRound',
+        'SatQ', 'UnsignedSatQ', 'SignedSatQ',
+        'ConditionHolds', 'BigEndianReverse',
+        'Hint_', 'System', 'ExclusiveMonitors',
+    ])
+
+    if has_for:
+        return "unsupported: for-loop (SIMD element-wise)"
+    if has_while:
+        return "unsupported: while-loop"
+    if has_elem:
+        return "unsupported: Elem[] vector element access"
+    if has_mem:
+        return "unsupported: memory access Mem[]"
+    if has_complex_fn:
+        return "unsupported: complex function call"
+
+    return None
+
+
+def translate_arm_pseudocode(operation: str, mnemonic: str) -> list[str] | None:
+    """Translate ARM pseudocode to IR, handling ARM-specific syntax.
+
+    Returns list of indented Rust body lines, or None if too complex.
+    """
+    # First classify if it's translatable at all
+    unsupported = _arm_classify_unsupported(operation)
+    if unsupported:
+        return None
+
+    lines = operation.strip().split('\n')
+    clean_lines = []
+    for line in lines:
+        stripped = line.strip()
+        if not stripped or stripped == '':
+            continue
+        # Strip trailing semicolons
+        stripped = stripped.rstrip(';').strip()
+        if not stripped:
+            continue
+        # Skip known non-computational lines
+        if any(stripped.startswith(pat) or stripped.startswith(f'// {pat}') for pat in _ARM_SKIP_PATTERNS):
+            continue
+        # Skip type declarations: bits(...) varname;  or  integer varname;  or  bit varname;
+        if re.match(r'^bits\(\w+\)\s+\w+$', stripped):
+            continue
+        if re.match(r'^integer\s+\w+$', stripped):
+            continue
+        if re.match(r'^bit\s+\w+$', stripped):
+            continue
+        clean_lines.append(stripped)
+
+    if not clean_lines:
+        return None
+
+    # Check for remaining if/for/while
+    has_if = any(l.startswith('if ') or l.startswith('IF ') for l in clean_lines)
+    has_for = any(l.startswith('for ') or l.startswith('FOR ') for l in clean_lines)
+    if has_for:
+        return None
+
+    # Simple case: no IF, few lines with assignments
+    if not has_if and len(clean_lines) <= 10:
+        return _translate_arm_flat(clean_lines, mnemonic)
+
+    # IF with simple body
+    if has_if and len(clean_lines) <= 15:
+        return _translate_arm_if(clean_lines, mnemonic)
+
+    return None
+
+
+def _arm_expr_to_ir(expr: str, local_vars: dict[str, str]) -> str:
+    """Convert an ARM pseudocode expression to IR code."""
+    expr = expr.strip()
+
+    # Check local variable
+    if expr in local_vars:
+        return local_vars[expr]
+
+    # ARM register access: X[n], X[d], etc.
+    if expr in ARM_PSEUDOCODE_REGS:
+        return ARM_PSEUDOCODE_REGS[expr]
+
+    # PSTATE.C, PSTATE.N etc.
+    pstate_m = re.match(r'^PSTATE\.([NZCV])$', expr)
+    if pstate_m:
+        return f'pstate_{pstate_m.group(1).lower()}.clone()'
+
+    # NOT(expr)
+    not_m = re.match(r'^NOT\((.+)\)$', expr)
+    if not_m:
+        inner = _arm_expr_to_ir(not_m.group(1), local_vars)
+        return f'u::not({inner})'
+
+    # ZeroExtend(expr, ...) or SignExtend(expr, ...)
+    ze_m = re.match(r'^(Zero|Sign)Extend\((.+?)(?:,\s*\w+)?\)$', expr)
+    if ze_m:
+        inner = _arm_expr_to_ir(ze_m.group(2), local_vars)
+        return inner  # simplified: extension is handled by assign size
+
+    # Abs(expr)
+    abs_m = re.match(r'^Abs\((.+)\)$', expr)
+    if abs_m:
+        inner = _arm_expr_to_ir(abs_m.group(1), local_vars)
+        return inner  # simplified
+
+    # SInt/UInt wrapping
+    sint_m = re.match(r'^[SU]Int\((.+)\)$', expr)
+    if sint_m:
+        return _arm_expr_to_ir(sint_m.group(1), local_vars)
+
+    # Numeric literal
+    if re.match(r'^[0-9]+$', expr):
+        return f'c({expr})'
+    if re.match(r'^0x[0-9a-fA-F]+$', expr):
+        return f'c({expr})'
+
+    # Bit slice: expr<high:low>
+    slice_m = re.match(r'^(.+)<(\d+):(\d+)>$', expr)
+    if slice_m:
+        return _arm_expr_to_ir(slice_m.group(1), local_vars)
+
+    # Binary: expr1 OP expr2 (try splitting on known operators)
+    for op_text, ir_fn in [(' EOR ', 'b::xor'), (' AND ', 'b::and'), (' OR ', 'b::or'),
+                            (' + ', 'b::add'), (' - ', 'b::sub'), (' * ', 'b::mul'),
+                            (' DIV ', 'b::unsigned_div'), (' MOD ', 'b::unsigned_mod')]:
+        if op_text in expr:
+            parts = expr.split(op_text, 1)
+            left = _arm_expr_to_ir(parts[0], local_vars)
+            right = _arm_expr_to_ir(parts[1], local_vars)
+            return f'{ir_fn}({left}, {right})'
+
+    # AddWithCarry(a, b, c) — common ARM pattern
+    awc_m = re.match(r'^AddWithCarry\((.+?),\s*(.+?),\s*(.+?)\)$', expr)
+    if awc_m:
+        a = _arm_expr_to_ir(awc_m.group(1), local_vars)
+        b = _arm_expr_to_ir(awc_m.group(2), local_vars)
+        carry = _arm_expr_to_ir(awc_m.group(3), local_vars)
+        return f'b::add(b::add({a}, {b}), {carry})'
+
+    # ShiftReg(n, type, amount) — simplified
+    sr_m = re.match(r'^ShiftReg\((.+?),\s*(.+?),\s*(.+?)\)$', expr)
+    if sr_m:
+        return _arm_expr_to_ir(f'X[{sr_m.group(1).strip()}]', local_vars) if sr_m.group(1).strip().isalpha() else 'o2()'
+
+    # Parenthesized expression
+    if expr.startswith('(') and expr.endswith(')'):
+        return _arm_expr_to_ir(expr[1:-1], local_vars)
+
+    # Fallback: unknown_data
+    return 'unknown_data()'
+
+
+def _translate_arm_flat(lines: list[str], mnemonic: str) -> list[str] | None:
+    """Translate simple ARM pseudocode lines (no if/for) to IR."""
+    rust_lines: list[str] = []
+    local_vars: dict[str, str] = {}
+    statements: list[str] = []
+    var_counter = 0
+
+    for line in lines:
+        # Tuple assignment: (result, nzcv) = AddWithCarry(...)
+        tuple_m = re.match(r'^\((\w+),\s*(\w+)\)\s*=\s*(.+)$', line)
+        if tuple_m:
+            var1, var2, expr_raw = tuple_m.group(1), tuple_m.group(2), tuple_m.group(3)
+            expr_ir = _arm_expr_to_ir(expr_raw, local_vars)
+            vn = f'v_{var_counter}'
+            var_counter += 1
+            rust_lines.append(f'    let {vn} = {expr_ir};')
+            local_vars[var1] = f'{vn}.clone()'
+            local_vars[var2] = f'{vn}.clone()'  # nzcv simplified
+            continue
+
+        # Assignment: target = expr
+        assign_m = re.match(r'^(\S+(?:\[.*?\])?(?:<[^>]+>)?)\s*=\s*(.+)$', line)
+        if not assign_m:
+            continue
+
+        target_raw = assign_m.group(1).strip()
+        expr_raw = assign_m.group(2).strip()
+
+        # Determine target IR and size
+        # Strip bit-slice from target
+        target_clean = re.sub(r'<[^>]+>', '', target_raw).strip()
+
+        if target_clean in ARM_PSEUDOCODE_REGS:
+            target_ir = ARM_PSEUDOCODE_REGS[target_clean]
+            size_ir = ARM_PSEUDOCODE_SIZES[target_clean]
+        elif target_clean.startswith('PSTATE.'):
+            flag = target_clean.split('.')[1]
+            if len(flag) == 1 and flag in 'NZCV':
+                target_ir = f'pstate_{flag.lower()}.clone()'
+                size_ir = f'size_relative(pstate_{flag.lower()}.clone())'
+            else:
+                continue  # complex PSTATE assignment
+        elif re.match(r'^[a-z_]\w*$', target_clean):
+            # Local variable
+            expr_ir = _arm_expr_to_ir(expr_raw, local_vars)
+            vn = f'v_{var_counter}'
+            var_counter += 1
+            rust_lines.append(f'    let {vn} = {expr_ir};')
+            local_vars[target_clean] = vn
+            continue
+        else:
+            continue
+
+        expr_ir = _arm_expr_to_ir(expr_raw, local_vars)
+        sn = f'stmt_{var_counter}'
+        var_counter += 1
+        rust_lines.append(f'    let {sn} = assign({expr_ir}, {target_ir}, {size_ir});')
+        statements.append(sn)
+
+    # PSTATE.<N,Z,C,V> = nzcv pattern: add flag calculation
+    # Check if any PSTATE flags were set
+    has_pstate = any('pstate_' in s for s in rust_lines)
+
+    if not statements:
+        return None
+
+    rust_lines.append(f'    [{", ".join(statements)}].into()')
+    return rust_lines
+
+
+def _translate_arm_if(lines: list[str], mnemonic: str) -> list[str] | None:
+    """Translate simple ARM IF/THEN pseudocode to IR."""
+    # For now, handle the common pattern:
+    #   if sub_op then operand2 = NOT(operand2);
+    #   ... (rest is flat assignments)
+    # Strategy: skip the condition, translate the non-conditional parts
+
+    flat_lines = []
+    in_skip = False
+    for line in lines:
+        l = line.strip()
+        if l.startswith('if ') or l.startswith('IF '):
+            # Check for single-line if: "if cond then stmt;"
+            single_m = re.match(r'^(?:if|IF)\s+.+\s+(?:then|THEN)\s+(.+)$', l)
+            if single_m:
+                # Skip single-line conditionals (like "if sub_op then operand2 = NOT(operand2)")
+                continue
+            in_skip = True
+            continue
+        if in_skip:
+            if l.startswith('else') or l.startswith('ELSE'):
+                in_skip = False
+                continue
+            if l.startswith('end') or l.startswith('END') or l == 'FI' or l == 'fi':
+                in_skip = False
+                continue
+            continue
+        if l.startswith('else') or l.startswith('ELSE'):
+            in_skip = True
+            continue
+        flat_lines.append(l)
+
+    if not flat_lines:
+        return None
+
+    return _translate_arm_flat(flat_lines, mnemonic)
+
+
+# ============================================================
 # Section 6: SIMD Pattern Detection
 # ============================================================
 
@@ -2346,9 +3255,42 @@ def generate_ir_body_with_status(inst: Instruction, arch: str = 'intel') -> tupl
     """
     mnemonic = inst.mnemonic
 
-    # ARM: no IR infrastructure exists yet
     if arch == 'arm':
-        return [f'    [exception("{mnemonic}")].into()'], "exception", "ARM: no IR infrastructure"
+        # --- ARM pipeline ---
+
+        # 1. Check ARM template match
+        if mnemonic in ARM_TEMPLATES:
+            body = ARM_TEMPLATES[mnemonic]
+            body_text = '\n'.join(body)
+            if 'exception(' in body_text:
+                return body, "exception", f"ARM template (exception): {mnemonic}"
+            return body, "real_ir", f"ARM template: {mnemonic}"
+
+        # 2. Check ARM conditional branch (b.eq, b.ne, etc.)
+        if mnemonic.startswith('b') and '.' in mnemonic:
+            cc = mnemonic.split('.', 1)[1]
+            if cc in ARM_CONDITION_CODES:
+                return [
+                    f'    let cond = {ARM_CONDITION_CODES[cc]};',
+                    '    let fallthrough = b::add(pc.clone(), instruction_byte_size());',
+                    '    [condition(cond, [jump(o1())], [jump(fallthrough)])].into()',
+                ], "real_ir", f"ARM conditional branch: b.{cc}"
+
+        # 3. Try ARM pseudocode translation
+        if inst.operation:
+            # First classify unsupported patterns explicitly
+            unsupported = _arm_classify_unsupported(inst.operation)
+            if unsupported:
+                return [f'    [exception("{mnemonic}")].into()'], "exception", f"ARM {unsupported}"
+
+            parsed = translate_arm_pseudocode(inst.operation, mnemonic)
+            if parsed:
+                return parsed, "real_ir", "ARM pseudocode translated"
+
+        # 4. Fallback
+        return [f'    [exception("{mnemonic}")].into()'], "exception", "ARM fallback: pseudocode too complex"
+
+    # --- Intel pipeline ---
 
     # 1. Check exact template match
     if mnemonic in TEMPLATES:
