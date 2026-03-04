@@ -564,46 +564,72 @@ pub(crate) fn parse_instructions(mut d: Vec<(Vec<PdfString>, PdfBoxes)>) -> Vec<
                 ScaleClass::Title => {
                     if !is_instruction_title(&text) {
                         // Title-scale text that isn't an instruction name:
-                        // treat as body text in current section (only if we have an active instruction)
+                        // Check if it's a section heading rendered at title scale
                         if has_current && !current.title.is_empty() {
-                            match &section {
-                                CurrentSection::Description => {
-                                    current.description.push(text.trim().to_owned());
+                            let new_section = detect_section(text.trim());
+                            if new_section != CurrentSection::None {
+                                if section == CurrentSection::Operation
+                                    && !operation_lines.is_empty()
+                                {
+                                    current.operation =
+                                        indent_operation_lines(&operation_lines);
+                                    operation_lines.clear();
                                 }
-                                CurrentSection::Operation => {
-                                    operation_lines.push((s.x(), text.trim().to_owned()));
-                                }
-                                CurrentSection::FlagsAffected => {
-                                    if current.flag_affected.is_empty() {
-                                        current.flag_affected = text.trim().to_owned();
-                                    } else {
-                                        current.flag_affected.push(' ');
-                                        current.flag_affected.push_str(text.trim());
-                                    }
-                                }
-                                CurrentSection::CppIntrinsic => {
-                                    current.c_and_cpp_equivalent.push(text.trim().to_owned());
-                                }
-                                CurrentSection::Exceptions(kind) => {
-                                    current
-                                        .exceptions
-                                        .entry(kind.clone())
-                                        .or_default()
-                                        .push(text.trim().to_owned());
-                                }
-                                CurrentSection::Other(name) => {
-                                    if let Some(entry) =
-                                        current.other_sections.iter_mut().find(|(n, _)| n == name)
-                                    {
-                                        entry.1.push(text.trim().to_owned());
-                                    } else {
+                                section = new_section;
+                                table_section_name = text.trim().to_owned();
+                            } else {
+                                match &section {
+                                    CurrentSection::Description => {
                                         current
-                                            .other_sections
-                                            .push((name.clone(), vec![text.trim().to_owned()]));
+                                            .description
+                                            .push(text.trim().to_owned());
                                     }
-                                }
-                                _ => {
-                                    current.description.push(text.trim().to_owned());
+                                    CurrentSection::Operation => {
+                                        operation_lines
+                                            .push((s.x(), text.trim().to_owned()));
+                                    }
+                                    CurrentSection::FlagsAffected => {
+                                        if current.flag_affected.is_empty() {
+                                            current.flag_affected =
+                                                text.trim().to_owned();
+                                        } else {
+                                            current.flag_affected.push(' ');
+                                            current
+                                                .flag_affected
+                                                .push_str(text.trim());
+                                        }
+                                    }
+                                    CurrentSection::CppIntrinsic => {
+                                        current
+                                            .c_and_cpp_equivalent
+                                            .push(text.trim().to_owned());
+                                    }
+                                    CurrentSection::Exceptions(kind) => {
+                                        current
+                                            .exceptions
+                                            .entry(kind.clone())
+                                            .or_default()
+                                            .push(text.trim().to_owned());
+                                    }
+                                    CurrentSection::Other(name) => {
+                                        if let Some(entry) = current
+                                            .other_sections
+                                            .iter_mut()
+                                            .find(|(n, _)| n == name)
+                                        {
+                                            entry.1.push(text.trim().to_owned());
+                                        } else {
+                                            current.other_sections.push((
+                                                name.clone(),
+                                                vec![text.trim().to_owned()],
+                                            ));
+                                        }
+                                    }
+                                    _ => {
+                                        current
+                                            .description
+                                            .push(text.trim().to_owned());
+                                    }
                                 }
                             }
                         }
@@ -647,44 +673,69 @@ pub(crate) fn parse_instructions(mut d: Vec<(Vec<PdfString>, PdfBoxes)>) -> Vec<
                     }
                 }
                 ScaleClass::Body => {
-                    match &section {
-                        CurrentSection::Description => {
-                            current.description.push(text.trim().to_owned());
+                    // Some PDFs render section headings at body font scale.
+                    // Detect known section keywords and treat them as headings.
+                    let new_section = detect_section(text.trim());
+                    if new_section != CurrentSection::None {
+                        // Flush operation lines when leaving Operation section
+                        if section == CurrentSection::Operation
+                            && !operation_lines.is_empty()
+                        {
+                            current.operation =
+                                indent_operation_lines(&operation_lines);
+                            operation_lines.clear();
                         }
-                        CurrentSection::Operation => {
-                            operation_lines.push((s.x(), text.trim().to_owned()));
-                        }
-                        CurrentSection::FlagsAffected => {
-                            if current.flag_affected.is_empty() {
-                                current.flag_affected = text.trim().to_owned();
-                            } else {
-                                current.flag_affected.push(' ');
-                                current.flag_affected.push_str(text.trim());
+                        section = new_section;
+                        table_section_name = text.trim().to_owned();
+                    } else {
+                        match &section {
+                            CurrentSection::Description => {
+                                current.description.push(text.trim().to_owned());
                             }
-                        }
-                        CurrentSection::CppIntrinsic => {
-                            current.c_and_cpp_equivalent.push(text.trim().to_owned());
-                        }
-                        CurrentSection::Exceptions(kind) => {
-                            current
-                                .exceptions
-                                .entry(kind.clone())
-                                .or_default()
-                                .push(text.trim().to_owned());
-                        }
-                        CurrentSection::Other(name) => {
-                            // Find or create the named section
-                            if let Some(entry) =
-                                current.other_sections.iter_mut().find(|(n, _)| n == name)
-                            {
-                                entry.1.push(text.trim().to_owned());
-                            } else {
+                            CurrentSection::Operation => {
+                                operation_lines
+                                    .push((s.x(), text.trim().to_owned()));
+                            }
+                            CurrentSection::FlagsAffected => {
+                                if current.flag_affected.is_empty() {
+                                    current.flag_affected =
+                                        text.trim().to_owned();
+                                } else {
+                                    current.flag_affected.push(' ');
+                                    current
+                                        .flag_affected
+                                        .push_str(text.trim());
+                                }
+                            }
+                            CurrentSection::CppIntrinsic => {
                                 current
-                                    .other_sections
-                                    .push((name.clone(), vec![text.trim().to_owned()]));
+                                    .c_and_cpp_equivalent
+                                    .push(text.trim().to_owned());
                             }
+                            CurrentSection::Exceptions(kind) => {
+                                current
+                                    .exceptions
+                                    .entry(kind.clone())
+                                    .or_default()
+                                    .push(text.trim().to_owned());
+                            }
+                            CurrentSection::Other(name) => {
+                                // Find or create the named section
+                                if let Some(entry) = current
+                                    .other_sections
+                                    .iter_mut()
+                                    .find(|(n, _)| n == name)
+                                {
+                                    entry.1.push(text.trim().to_owned());
+                                } else {
+                                    current.other_sections.push((
+                                        name.clone(),
+                                        vec![text.trim().to_owned()],
+                                    ));
+                                }
+                            }
+                            _ => {}
                         }
-                        _ => {}
                     }
                 }
                 ScaleClass::SmallText => {
