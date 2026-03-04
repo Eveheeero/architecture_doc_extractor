@@ -259,41 +259,29 @@ fn find_band_index_asc(bounds: &[f32], x: f32) -> usize {
 }
 
 /// Calculate indentation for operation lines based on X position.
-/// Returns lines with leading spaces for indentation.
+/// Clusters X positions into bands (±3pt tolerance), then assigns
+/// indent levels based on band index rather than raw distance.
 fn indent_operation_lines(lines: &[(f32, String)]) -> String {
     if lines.is_empty() {
         return String::new();
     }
 
-    // Find the minimum X (base indentation)
-    let base_x = lines.iter().map(|(x, _)| *x).fold(f32::MAX, f32::min);
-
-    // Detect indent unit from X position differences
+    // Collect unique X positions and cluster into bands (±3pt tolerance)
     let mut x_positions: Vec<f32> = lines.iter().map(|(x, _)| *x).collect();
     x_positions.sort_by(|a, b| a.partial_cmp(b).unwrap());
-    x_positions.dedup_by(|a, b| (*a - *b).abs() < 1.0);
 
-    let indent_unit = if x_positions.len() >= 2 {
-        // Find minimum gap between distinct X positions
-        let mut min_gap = f32::MAX;
-        for w in x_positions.windows(2) {
-            let gap = w[1] - w[0];
-            if gap > 1.0 && gap < min_gap {
-                min_gap = gap;
-            }
+    let mut bands: Vec<f32> = Vec::new();
+    for &x in &x_positions {
+        if !bands.iter().any(|&b| (b - x).abs() < 3.0) {
+            bands.push(x);
         }
-        if min_gap == f32::MAX {
-            3.5
-        } else {
-            min_gap
-        }
-    } else {
-        3.5
-    };
+    }
+    bands.sort_by(|a, b| a.partial_cmp(b).unwrap());
 
     let mut result = Vec::new();
     for (x, text) in lines {
-        let indent_level = ((x - base_x) / indent_unit).round() as usize;
+        // Find the band index for this X position
+        let indent_level = bands.iter().position(|&b| (b - x).abs() < 3.0).unwrap_or(0);
         let spaces = "    ".repeat(indent_level);
         result.push(format!("{spaces}{text}"));
     }
@@ -324,7 +312,10 @@ fn is_header_footer(s: &PdfString, page_y_range: (f32, f32)) -> bool {
 /// Returns the matching section, or `Other(heading_text)` for unrecognized headings.
 fn detect_section(text: &str) -> CurrentSection {
     let trimmed = text.trim();
-    if trimmed.starts_with("Opcode") || trimmed == "Instruction" {
+    if trimmed.starts_with("Opcode")
+        || trimmed == "Instruction"
+        || trimmed == "Instruction Operand Encoding"
+    {
         return CurrentSection::InstructionTable;
     }
     if trimmed == "Description" {
@@ -333,7 +324,7 @@ fn detect_section(text: &str) -> CurrentSection {
     if trimmed == "Operation" {
         return CurrentSection::Operation;
     }
-    if trimmed == "Flags Affected" {
+    if trimmed == "Flags Affected" || trimmed == "FPU Flags Affected" {
         return CurrentSection::FlagsAffected;
     }
     if trimmed.contains("Intrinsic") {
@@ -342,14 +333,8 @@ fn detect_section(text: &str) -> CurrentSection {
     if trimmed.ends_with("Exceptions") {
         return CurrentSection::Exceptions(trimmed.to_owned());
     }
-    // Only treat as a named section if it looks like a real heading
-    // (at least 3 chars, starts with uppercase, no leading punctuation)
-    if trimmed.len() >= 3
-        && trimmed
-            .chars()
-            .next()
-            .map_or(false, |c| c.is_ascii_uppercase())
-    {
+    // Table labels and other known sub-section headings
+    if trimmed.starts_with("Table ") || trimmed == "Effective Operand Size" || trimmed == "NOTES" {
         return CurrentSection::Other(trimmed.to_owned());
     }
     CurrentSection::None
@@ -571,8 +556,7 @@ pub(crate) fn parse_instructions(mut d: Vec<(Vec<PdfString>, PdfBoxes)>) -> Vec<
                                 if section == CurrentSection::Operation
                                     && !operation_lines.is_empty()
                                 {
-                                    current.operation =
-                                        indent_operation_lines(&operation_lines);
+                                    current.operation = indent_operation_lines(&operation_lines);
                                     operation_lines.clear();
                                 }
                                 section = new_section;
@@ -580,29 +564,21 @@ pub(crate) fn parse_instructions(mut d: Vec<(Vec<PdfString>, PdfBoxes)>) -> Vec<
                             } else {
                                 match &section {
                                     CurrentSection::Description => {
-                                        current
-                                            .description
-                                            .push(text.trim().to_owned());
+                                        current.description.push(text.trim().to_owned());
                                     }
                                     CurrentSection::Operation => {
-                                        operation_lines
-                                            .push((s.x(), text.trim().to_owned()));
+                                        operation_lines.push((s.x(), text.trim().to_owned()));
                                     }
                                     CurrentSection::FlagsAffected => {
                                         if current.flag_affected.is_empty() {
-                                            current.flag_affected =
-                                                text.trim().to_owned();
+                                            current.flag_affected = text.trim().to_owned();
                                         } else {
                                             current.flag_affected.push(' ');
-                                            current
-                                                .flag_affected
-                                                .push_str(text.trim());
+                                            current.flag_affected.push_str(text.trim());
                                         }
                                     }
                                     CurrentSection::CppIntrinsic => {
-                                        current
-                                            .c_and_cpp_equivalent
-                                            .push(text.trim().to_owned());
+                                        current.c_and_cpp_equivalent.push(text.trim().to_owned());
                                     }
                                     CurrentSection::Exceptions(kind) => {
                                         current
@@ -619,16 +595,13 @@ pub(crate) fn parse_instructions(mut d: Vec<(Vec<PdfString>, PdfBoxes)>) -> Vec<
                                         {
                                             entry.1.push(text.trim().to_owned());
                                         } else {
-                                            current.other_sections.push((
-                                                name.clone(),
-                                                vec![text.trim().to_owned()],
-                                            ));
+                                            current
+                                                .other_sections
+                                                .push((name.clone(), vec![text.trim().to_owned()]));
                                         }
                                     }
                                     _ => {
-                                        current
-                                            .description
-                                            .push(text.trim().to_owned());
+                                        current.description.push(text.trim().to_owned());
                                     }
                                 }
                             }
@@ -655,20 +628,58 @@ pub(crate) fn parse_instructions(mut d: Vec<(Vec<PdfString>, PdfBoxes)>) -> Vec<
                     table_section_name = String::from("Instruction");
                 }
                 ScaleClass::Heading => {
-                    // Flush operation lines when leaving Operation section
-                    if section == CurrentSection::Operation && !operation_lines.is_empty() {
-                        current.operation = indent_operation_lines(&operation_lines);
-                        operation_lines.clear();
-                    }
-
                     let new_section = detect_section(&text);
-                    match &new_section {
-                        CurrentSection::None => {
-                            // Unrecognized heading text — don't change section
+                    if new_section != CurrentSection::None {
+                        // Known section heading — flush and switch
+                        if section == CurrentSection::Operation && !operation_lines.is_empty() {
+                            current.operation = indent_operation_lines(&operation_lines);
+                            operation_lines.clear();
                         }
-                        _ => {
-                            section = new_section;
-                            table_section_name = text.trim().to_owned();
+                        section = new_section;
+                        table_section_name = text.trim().to_owned();
+                    } else {
+                        // Not a known heading — treat as body content
+                        // in the current section
+                        match &section {
+                            CurrentSection::Description => {
+                                current.description.push(text.trim().to_owned());
+                            }
+                            CurrentSection::Operation => {
+                                operation_lines.push((s.x(), text.trim().to_owned()));
+                            }
+                            CurrentSection::FlagsAffected => {
+                                if current.flag_affected.is_empty() {
+                                    current.flag_affected = text.trim().to_owned();
+                                } else {
+                                    current.flag_affected.push(' ');
+                                    current.flag_affected.push_str(text.trim());
+                                }
+                            }
+                            CurrentSection::CppIntrinsic => {
+                                current.c_and_cpp_equivalent.push(text.trim().to_owned());
+                            }
+                            CurrentSection::Exceptions(kind) => {
+                                current
+                                    .exceptions
+                                    .entry(kind.clone())
+                                    .or_default()
+                                    .push(text.trim().to_owned());
+                            }
+                            CurrentSection::Other(name) => {
+                                if let Some(entry) =
+                                    current.other_sections.iter_mut().find(|(n, _)| n == name)
+                                {
+                                    entry.1.push(text.trim().to_owned());
+                                } else {
+                                    current
+                                        .other_sections
+                                        .push((name.clone(), vec![text.trim().to_owned()]));
+                                }
+                            }
+                            _ => {
+                                // No active section yet — default to description
+                                current.description.push(text.trim().to_owned());
+                            }
                         }
                     }
                 }
@@ -678,11 +689,8 @@ pub(crate) fn parse_instructions(mut d: Vec<(Vec<PdfString>, PdfBoxes)>) -> Vec<
                     let new_section = detect_section(text.trim());
                     if new_section != CurrentSection::None {
                         // Flush operation lines when leaving Operation section
-                        if section == CurrentSection::Operation
-                            && !operation_lines.is_empty()
-                        {
-                            current.operation =
-                                indent_operation_lines(&operation_lines);
+                        if section == CurrentSection::Operation && !operation_lines.is_empty() {
+                            current.operation = indent_operation_lines(&operation_lines);
                             operation_lines.clear();
                         }
                         section = new_section;
@@ -693,24 +701,18 @@ pub(crate) fn parse_instructions(mut d: Vec<(Vec<PdfString>, PdfBoxes)>) -> Vec<
                                 current.description.push(text.trim().to_owned());
                             }
                             CurrentSection::Operation => {
-                                operation_lines
-                                    .push((s.x(), text.trim().to_owned()));
+                                operation_lines.push((s.x(), text.trim().to_owned()));
                             }
                             CurrentSection::FlagsAffected => {
                                 if current.flag_affected.is_empty() {
-                                    current.flag_affected =
-                                        text.trim().to_owned();
+                                    current.flag_affected = text.trim().to_owned();
                                 } else {
                                     current.flag_affected.push(' ');
-                                    current
-                                        .flag_affected
-                                        .push_str(text.trim());
+                                    current.flag_affected.push_str(text.trim());
                                 }
                             }
                             CurrentSection::CppIntrinsic => {
-                                current
-                                    .c_and_cpp_equivalent
-                                    .push(text.trim().to_owned());
+                                current.c_and_cpp_equivalent.push(text.trim().to_owned());
                             }
                             CurrentSection::Exceptions(kind) => {
                                 current
@@ -721,20 +723,20 @@ pub(crate) fn parse_instructions(mut d: Vec<(Vec<PdfString>, PdfBoxes)>) -> Vec<
                             }
                             CurrentSection::Other(name) => {
                                 // Find or create the named section
-                                if let Some(entry) = current
-                                    .other_sections
-                                    .iter_mut()
-                                    .find(|(n, _)| n == name)
+                                if let Some(entry) =
+                                    current.other_sections.iter_mut().find(|(n, _)| n == name)
                                 {
                                     entry.1.push(text.trim().to_owned());
                                 } else {
-                                    current.other_sections.push((
-                                        name.clone(),
-                                        vec![text.trim().to_owned()],
-                                    ));
+                                    current
+                                        .other_sections
+                                        .push((name.clone(), vec![text.trim().to_owned()]));
                                 }
                             }
-                            _ => {}
+                            _ => {
+                                // No active section yet — default to description
+                                current.description.push(text.trim().to_owned());
+                            }
                         }
                     }
                 }

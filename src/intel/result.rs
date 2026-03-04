@@ -284,6 +284,38 @@ impl Instruction {
             .collect()
     }
     fn get_reformed_operation(&self) -> Vec<String> {
-        self.operation.lines().map(|line| line.to_owned()).collect()
+        self.operation
+            .lines()
+            .map(|line| postprocess_operation_line(line))
+            .collect()
     }
+}
+
+/// Fix garbled text produced by PDF character clustering errors.
+/// The PDF renderer interleaves characters from "ELSE" and "; zeroing-masking"
+/// when they share the same Y position, producing variants like:
+///   "zerEoLinSg-mEask ; ing" or "zerEoLinSg-mEa ;s king"
+/// This function normalizes known corruption patterns.
+fn postprocess_operation_line(line: &str) -> String {
+    let trimmed = line.trim();
+
+    // "zerEoLinSg-mEask ; ing" / "zerEoLinSg-mEa ;s king" → ELSE ; zeroing-masking
+    if trimmed.contains("zerEoLinSg") {
+        let indent = &line[..line.len() - line.trim_start().len()];
+        return format!("{indent}ELSE ; zeroing-masking");
+    }
+
+    // Standalone "; merging-masking" or "; zeroing-masking" with excessive whitespace
+    // These are PDF comments that got split onto their own line
+    if trimmed == "; merging-masking" || trimmed == "; zeroing-masking" {
+        let indent = &line[..line.len() - line.trim_start().len()];
+        return format!("{indent}{trimmed}");
+    }
+
+    // "THENDEST" → "THEN DEST" (missing space from PDF clustering)
+    if trimmed.contains("THENDEST") {
+        return line.replace("THENDEST", "THEN DEST");
+    }
+
+    line.to_owned()
 }
