@@ -53,6 +53,14 @@ pub(crate) struct BitField {
 }
 
 #[derive(Debug, Default, Clone)]
+pub(crate) struct ArmAlias {
+    /// 에일리어스 이름
+    pub(crate) name: String,
+    /// 선호 디스어셈블리 / 합법성 조건 텍스트
+    pub(crate) preferred_conditions: Vec<String>,
+}
+
+#[derive(Debug, Default, Clone)]
 pub(crate) struct ArmInstruction {
     /// XML id (e.g., "ADD_addsub_imm") — 유일한 식별자
     pub(crate) id: String,
@@ -76,8 +84,8 @@ pub(crate) struct ArmInstruction {
     pub(crate) decode_pseudocode: String,
     /// 실행 의사코드
     pub(crate) operation: String,
-    /// 에일리어스 참조
-    pub(crate) aliases: Vec<String>,
+    /// 에일리어스 참조와 선호 조건
+    pub(crate) aliases: Vec<ArmAlias>,
     /// 운영 노트
     pub(crate) operational_notes: Vec<String>,
 }
@@ -169,7 +177,15 @@ impl ArmInstruction {
             result.push("## Aliases".to_owned());
             result.push("".to_owned());
             for alias in &self.aliases {
-                result.push(format!("- {alias}"));
+                if alias.preferred_conditions.is_empty() {
+                    result.push(format!("- {}", alias.name));
+                } else {
+                    result.push(format!(
+                        "- {} — Preferred when {}",
+                        alias.name,
+                        alias.preferred_conditions.join(" ; ")
+                    ));
+                }
             }
         }
 

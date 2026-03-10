@@ -126,6 +126,12 @@ def _body_has_any(body: str, *patterns: str) -> bool:
     return any(p in body for p in patterns)
 
 
+def _pseudocode_has_alias(pseudocode: str, alias: str) -> bool:
+    """Check whether pseudocode metadata marks an alias as preferred."""
+    pattern = rf"- {re.escape(alias.upper())}(?: \([^)]*\))? — Preferred when"
+    return re.search(pattern, pseudocode) is not None
+
+
 def _check_flags_before_assign(body: str) -> bool | None:
     """Check that calc_flags_automatically appears before assign in the array.
     Returns True if correct, False if wrong, None if not applicable."""
@@ -305,6 +311,7 @@ def validate_arm_function(fn: FunctionIR) -> ValidationResult:
     """Validate a single ARM function's IR against its pseudocode."""
     name = fn.name
     body = fn.body
+    pseudocode = fn.pseudocode or ''
     pc = fn.pseudocode.lower() if fn.pseudocode else ''
     issues: list[str] = []
 
@@ -478,6 +485,107 @@ def validate_arm_function(fn: FunctionIR) -> ValidationResult:
                 issues.append(f"rmif should conditionally update {flag}")
         if re.search(r'assign\([^,]+,\s*o1\(\)', body):
             issues.append("rmif should not write back into the source register")
+
+    if name in {'ubfm', 'sbfm', 'bfm'}:
+        if 'b::signed_less(o4(), o3(),' not in body:
+            issues.append(f"{name} should branch on wrap vs non-wrap bitfield cases")
+        if 'extract_width' not in body or 'insert_width' not in body:
+            issues.append(f"{name} should derive both extract and insert widths")
+        if 'b::shr(o2(), o3())' not in body or 'b::shl(b::and(o2(),' not in body:
+            issues.append(f"{name} should model both shifted extract and inserted low-bit cases")
+        if 'tmp32' not in body or 'tmp64' not in body:
+            issues.append(f"{name} should use temporaries for masks and selected bits")
+        if name == 'bfm':
+            if 'o1()' not in body:
+                issues.append("bfm should preserve and update the destination register")
+            if 'assign(tmp64.clone(), o1(), o1_size())' in body or 'assign(b::sar(b::shl(tmp64.clone(), tmp32.clone()), tmp32.clone()), o1(), o1_size())' in body:
+                issues.append("bfm should preserve destination bits instead of fully overwriting o1()")
+            if 'b::or(' not in body or 'b::and(o1(),' not in body:
+                issues.append("bfm should merge selected source bits with preserved destination bits")
+        elif 'assign(tmp64.clone(), o1(), o1_size())' not in body and 'assign(b::sar(b::shl(tmp64.clone(), tmp32.clone()), tmp32.clone()), o1(), o1_size())' not in body:
+            issues.append(f"{name} should write the selected bitfield result into o1()")
+    if name == 'ubfm' and 'b::sar(' in body:
+        issues.append("ubfm should not sign-extend the selected bitfield")
+    if name == 'sbfm' and 'b::sar(' not in body:
+        issues.append("sbfm should sign-extend the selected bitfield")
+    if name == 'ubfm' and _pseudocode_has_alias(pseudocode, 'ubfiz'):
+        if 'insert_width = b::add(o4(), c(1))' not in body:
+            issues.append("ubfm should remap UBFIZ width from imms into insert_width")
+        if 'insert_shift = b::sub(datasize.clone(), o3())' not in body:
+            issues.append("ubfm should remap UBFIZ lsb from immr into datasize - immr")
+        if 'condition(wrap.clone(), [insert_mask, insert_write_mask, insert_value], [extract_mask, extract_value])' not in body:
+            issues.append("ubfm should keep UBFIZ on the wrap/insert bitfield path")
+    if name == 'sbfm' and _pseudocode_has_alias(pseudocode, 'sbfiz'):
+        if 'insert_width = b::add(o4(), c(1))' not in body:
+            issues.append("sbfm should remap SBFIZ width from imms into insert_width")
+        if 'insert_shift = b::sub(datasize.clone(), o3())' not in body:
+            issues.append("sbfm should remap SBFIZ lsb from immr into datasize - immr")
+        if 'condition(wrap.clone(), [insert_mask, insert_write_mask, insert_value], [extract_mask, extract_value])' not in body:
+            issues.append("sbfm should keep SBFIZ on the wrap/insert bitfield path")
+        if 'wrap.clone()' not in body:
+            issues.append("sbfm should gate SBFIZ sign-extension through the wrap-aware path")
+    if name == 'ubfm' and _pseudocode_has_alias(pseudocode, 'ubfx'):
+        if 'extract_width = b::add(b::sub(o4(), o3()), c(1))' not in body:
+            issues.append("ubfm should remap UBFX width from immr/imms into extract_width")
+        if 'assign(b::and(b::shr(o2(), o3()), tmp32.clone()), tmp64.clone(), o1_size())' not in body:
+            issues.append("ubfm should remap UBFX lsb to the non-wrap extract path")
+        if 'condition(wrap.clone(), [insert_mask, insert_write_mask, insert_value], [extract_mask, extract_value])' not in body:
+            issues.append("ubfm should keep UBFX on the non-wrap/extract bitfield path")
+        if 'b::sar(' in body:
+            issues.append("ubfm should not sign-extend the UBFX alias path")
+    if name == 'sbfm' and _pseudocode_has_alias(pseudocode, 'sbfx'):
+        if 'extract_width = b::add(b::sub(o4(), o3()), c(1))' not in body:
+            issues.append("sbfm should remap SBFX width from immr/imms into extract_width")
+        if 'assign(b::and(b::shr(o2(), o3()), tmp32.clone()), tmp64.clone(), o1_size())' not in body:
+            issues.append("sbfm should remap SBFX lsb to the non-wrap extract path")
+        if 'condition(wrap.clone(), [insert_mask, insert_write_mask, insert_value], [extract_mask, extract_value])' not in body:
+            issues.append("sbfm should keep SBFX on the non-wrap/extract bitfield path")
+        if 'b::sar(' not in body:
+            issues.append("sbfm should sign-extend the SBFX alias path")
+    if name == 'bfm' and _pseudocode_has_alias(pseudocode, 'bfi'):
+        if 'insert_width = b::add(o4(), c(1))' not in body:
+            issues.append("bfm should remap BFI width from imms into insert_width")
+        if 'insert_shift = b::sub(datasize.clone(), o3())' not in body:
+            issues.append("bfm should remap BFI lsb from immr into datasize - immr")
+        if 'condition(wrap.clone(), [insert_mask, insert_write_mask, insert_value], [extract_mask, extract_value])' not in body:
+            issues.append("bfm should keep BFI on the wrap/insert merge path")
+    if name == 'bfm' and _pseudocode_has_alias(pseudocode, 'bfxil'):
+        if 'extract_width = b::add(b::sub(o4(), o3()), c(1))' not in body:
+            issues.append("bfm should remap BFXIL width from immr/imms into extract_width")
+        if 'assign(b::and(b::shr(o2(), o3()), tmp32.clone()), tmp64.clone(), o1_size())' not in body:
+            issues.append("bfm should remap BFXIL lsb to the low-bit extract path")
+        if 'condition(wrap.clone(), [insert_mask, insert_write_mask, insert_value], [extract_mask, extract_value])' not in body:
+            issues.append("bfm should keep BFXIL on the non-wrap/extract merge path")
+
+    if name == 'uxth':
+        if 'assign(c(0), tmp32.clone(), o1_size())' not in body:
+            issues.append("uxth should fix immr at zero for the low-halfword alias")
+        if 'assign(c(15), tmp64.clone(), o1_size())' not in body:
+            issues.append("uxth should fix imms at 15 for the low-halfword alias")
+        if 'b::sar(' in body:
+            issues.append("uxth should zero-extend rather than arithmetic-sign-extend")
+        if 'assign(tmp64.clone(), o1(), o1_size())' not in body:
+            issues.append("uxth should write the extracted halfword into o1()")
+
+    if name == 'sxth':
+        if 'assign(c(0), tmp32.clone(), o1_size())' not in body:
+            issues.append("sxth should fix immr at zero for the low-halfword alias")
+        if 'assign(c(15), tmp64.clone(), o1_size())' not in body:
+            issues.append("sxth should fix imms at 15 for the low-halfword alias")
+        if 'b::sar(' not in body:
+            issues.append("sxth should arithmetic-sign-extend the extracted halfword")
+        if 'assign(b::sar(' not in body:
+            issues.append("sxth should write the sign-extended halfword into o1()")
+
+    if name == 'sxtw':
+        if 'assign(c(0), tmp32.clone(), o1_size())' not in body:
+            issues.append("sxtw should fix immr at zero for the low-word alias")
+        if 'assign(c(31), tmp64.clone(), o1_size())' not in body:
+            issues.append("sxtw should fix imms at 31 for the low-word alias")
+        if 'b::sar(' not in body:
+            issues.append("sxtw should arithmetic-sign-extend the extracted word")
+        if 'assign(b::sar(' not in body:
+            issues.append("sxtw should write the sign-extended word into o1()")
 
     # AXFLAG/XAFLAG should assign all 4 PSTATE flags
     if name in ('axflag', 'xaflag'):

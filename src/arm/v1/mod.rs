@@ -1,4 +1,4 @@
-use super::result::{ArmEncoding, ArmInstruction, BitField};
+use super::result::{ArmAlias, ArmEncoding, ArmInstruction, BitField};
 use quick_xml::events::{BytesStart, Event};
 use quick_xml::Reader;
 use std::collections::HashMap;
@@ -64,6 +64,10 @@ fn parse_instruction_xml(data: &[u8]) -> Option<ArmInstruction> {
     let mut in_aliasref = false;
     let mut in_aliasref_text = false;
     let mut in_aliaspref = false;
+    let mut current_alias_name = String::new();
+    let mut current_alias_conditions: Vec<String> = Vec::new();
+    let mut current_aliaspref_text = String::new();
+    let mut current_aliaspref_labels = String::new();
     let mut in_para = false;
     let mut in_list = false;
     let mut in_listitem = false;
@@ -138,12 +142,16 @@ fn parse_instruction_xml(data: &[u8]) -> Option<ArmInstruction> {
                     b"alias_list" if in_instructionsection => in_alias_list = true,
                     b"aliasref" if in_alias_list => {
                         in_aliasref = true;
+                        current_alias_name.clear();
+                        current_alias_conditions.clear();
                     }
                     b"text" if in_aliasref => {
                         in_aliasref_text = true;
                     }
                     b"aliaspref" if in_aliasref => {
                         in_aliaspref = true;
+                        current_aliaspref_text.clear();
+                        current_aliaspref_labels = get_attr(e, "labels").unwrap_or_default();
                     }
                     b"classes" if in_instructionsection => in_classes = true,
                     b"iclass" if in_classes => {
@@ -276,9 +284,35 @@ fn parse_instruction_xml(data: &[u8]) -> Option<ArmInstruction> {
                         }
                     }
                     b"alias_list" => in_alias_list = false,
-                    b"aliasref" => in_aliasref = false,
+                    b"aliasref" => {
+                        let alias_name = current_alias_name.trim();
+                        if !alias_name.is_empty() {
+                            instr.aliases.push(ArmAlias {
+                                name: alias_name.to_owned(),
+                                preferred_conditions: current_alias_conditions.clone(),
+                            });
+                        }
+                        current_alias_name.clear();
+                        current_alias_conditions.clear();
+                        in_aliasref = false;
+                    }
                     b"text" if in_aliasref => in_aliasref_text = false,
-                    b"aliaspref" => in_aliaspref = false,
+                    b"aliaspref" => {
+                        let condition = current_aliaspref_text.trim();
+                        if !condition.is_empty() {
+                            if current_aliaspref_labels.is_empty() {
+                                current_alias_conditions.push(condition.to_owned());
+                            } else {
+                                current_alias_conditions.push(format!(
+                                    "[{}] {}",
+                                    current_aliaspref_labels, condition
+                                ));
+                            }
+                        }
+                        current_aliaspref_text.clear();
+                        current_aliaspref_labels.clear();
+                        in_aliaspref = false;
+                    }
                     b"classes" => in_classes = false,
                     b"iclass" => {
                         // iclass 끝: decode pseudocode 저장
@@ -422,12 +456,11 @@ fn parse_instruction_xml(data: &[u8]) -> Option<ArmInstruction> {
                     }
                 }
 
-                // alias: <text> 내부만 수집, <aliaspref> 내용은 무시
                 if in_aliasref_text && !in_aliaspref {
-                    let t = text.trim();
-                    if !t.is_empty() {
-                        instr.aliases.push(t.to_owned());
-                    }
+                    current_alias_name.push_str(&text);
+                }
+                if in_aliaspref {
+                    current_aliaspref_text.push_str(&text);
                 }
             }
             Ok(Event::Empty(ref e)) => {

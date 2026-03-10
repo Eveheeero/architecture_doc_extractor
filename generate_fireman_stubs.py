@@ -24,6 +24,14 @@ class Instruction:
     mnemonic: str      # lowercase e.g. "adc"
     operation: str     # Operation pseudocode (or empty)
     first_letter: str  # for file grouping
+    aliases: list["AliasInfo"] = field(default_factory=list)
+
+
+@dataclass
+class AliasInfo:
+    title: str
+    mnemonic: str
+    condition: str
 
 
 @dataclass
@@ -64,6 +72,7 @@ def parse_rs_enum(filepath: str) -> list[Instruction]:
         if variant_match:
             variant_name = variant_match.group(1)
             operation = extract_operation(doc_lines)
+            aliases = extract_aliases(doc_lines)
             mnemonic = variant_name.lower()
 
             if doc_lines and not operation:
@@ -78,6 +87,7 @@ def parse_rs_enum(filepath: str) -> list[Instruction]:
                 mnemonic=mnemonic,
                 operation=operation,
                 first_letter=mnemonic[0],
+                aliases=aliases,
             ))
             doc_lines = []
         elif line.strip().startswith("///"):
@@ -123,6 +133,45 @@ def extract_operation(doc_lines: list[str]) -> str:
         return _extract_fenced_operation(doc_lines, op_start)
     else:
         return _extract_bare_operation(doc_lines, op_start)
+
+
+def extract_aliases(doc_lines: list[str]) -> list[AliasInfo]:
+    """Extract alias metadata from a doc comment block."""
+    alias_start = None
+    for i, line in enumerate(doc_lines):
+        if line.strip() == "## Aliases":
+            alias_start = i + 1
+            break
+
+    if alias_start is None:
+        return []
+
+    aliases: list[AliasInfo] = []
+    for line in doc_lines[alias_start:]:
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped.startswith("## "):
+            break
+        if not stripped.startswith("- "):
+            continue
+
+        body = stripped[2:].strip()
+        name, sep, condition = body.partition(" — Preferred when ")
+        aliases.append(AliasInfo(
+            title=name.strip(),
+            mnemonic=_normalize_alias_mnemonic(name),
+            condition=condition.strip() if sep else "",
+        ))
+
+    return aliases
+
+
+def _normalize_alias_mnemonic(name: str) -> str:
+    """Normalize ARM alias labels into safe mnemonic keys used by the generator."""
+    mnemonic = name.strip().lower()
+    mnemonic = re.sub(r"\s+\([^)]*\)$", "", mnemonic)
+    return re.sub(r"\s+", " ", mnemonic)
 
 
 _SECTION_STOP_PATTERNS = [
@@ -1257,6 +1306,174 @@ def _arm_t_rev() -> list[str]:
     return lines
 
 
+def _arm_t_bitfield_move(sign_extend: bool, preserve_destination: bool = False) -> list[str]:
+    """ARM scalar bitfield move using raw immr/imms operands and IR rotate/mask primitives."""
+    lines = [
+        '    let datasize = bit_size_of_o1();',
+        '    let wrap = b::signed_less(o4(), o3(), o1_size());',
+        '    let extract_width = b::add(b::sub(o4(), o3()), c(1));',
+        '    let insert_width = b::add(o4(), c(1));',
+        '    let extract_mask = condition(',
+        '        b::equal(extract_width.clone(), datasize.clone(), size_unlimited()),',
+        '        [assign(u::not(c(0)), tmp32.clone(), o1_size())],',
+        '        [assign(b::sub(b::shl(c(1), extract_width.clone()), c(1)), tmp32.clone(), o1_size())],',
+        '    );',
+        '    let extract_value = assign(b::and(b::shr(o2(), o3()), tmp32.clone()), tmp64.clone(), o1_size());',
+        '    let insert_mask = assign(b::sub(b::shl(c(1), insert_width.clone()), c(1)), tmp32.clone(), o1_size());',
+        '    let insert_shift = b::sub(datasize.clone(), o3());',
+        '    let insert_write_mask = assign(b::shl(tmp32.clone(), insert_shift.clone()), tmp32.clone(), o1_size());',
+        '    let insert_value = assign(b::shl(b::and(o2(), tmp32.clone()), insert_shift), tmp64.clone(), o1_size());',
+        '    let select = condition(wrap.clone(), [insert_mask, insert_write_mask, insert_value], [extract_mask, extract_value]);',
+    ]
+    if sign_extend:
+        lines.extend([
+            '    let extend_shift = condition(',
+            '        wrap.clone(),',
+            '        [assign(b::sub(b::sub(o3(), o4()), c(1)), tmp32.clone(), o1_size())],',
+            '        [assign(b::sub(datasize.clone(), extract_width.clone()), tmp32.clone(), o1_size())],',
+            '    );',
+            '    let assignment = assign(b::sar(b::shl(tmp64.clone(), tmp32.clone()), tmp32.clone()), o1(), o1_size());',
+            '    [select, extend_shift, assignment].into()',
+        ])
+    elif preserve_destination:
+        lines.extend([
+            '    let preserved = b::and(o1(), u::not(tmp32.clone()));',
+            '    let assignment = assign(b::or(preserved, b::and(tmp64.clone(), tmp32.clone())), o1(), o1_size());',
+            '    [select, assignment].into()',
+        ])
+    else:
+        lines.extend([
+            '    let assignment = assign(tmp64.clone(), o1(), o1_size());',
+            '    [select, assignment].into()',
+        ])
+    return lines
+
+
+_ARM_BITFIELD_ALIAS_TARGETS = frozenset({
+    'ubfx',
+    'sbfx',
+    'ubfiz',
+    'sbfiz',
+    'bfi',
+    'bfxil',
+    'uxth',
+    'sxth',
+    'sxtw',
+})
+
+
+def _arm_t_bitfield_alias_prelude(alias_mnemonic: str) -> list[str]:
+    """Remap alias-level lsb/width operands in o3/o4 into canonical immr/imms stored in tmp32/tmp64."""
+    if alias_mnemonic in {'ubfiz', 'sbfiz', 'bfi'}:
+        return [
+            '    let alias_lsb = o3();',
+            '    let alias_width = o4();',
+            '    let datasize = bit_size_of_o1();',
+            '    let canonical_immr = b::sub(datasize.clone(), alias_lsb);',
+            '    let canonical_imms = b::sub(alias_width, c(1));',
+            '    let remap_immr = assign(canonical_immr, tmp32.clone(), o1_size());',
+            '    let remap_imms = assign(canonical_imms, tmp64.clone(), o1_size());',
+        ]
+    if alias_mnemonic in {'ubfx', 'sbfx', 'bfxil'}:
+        return [
+            '    let alias_lsb = o3();',
+            '    let alias_width = o4();',
+            '    let canonical_imms = b::add(b::sub(alias_width, c(1)), alias_lsb.clone());',
+            '    let remap_immr = assign(alias_lsb, tmp32.clone(), o1_size());',
+            '    let remap_imms = assign(canonical_imms, tmp64.clone(), o1_size());',
+        ]
+    if alias_mnemonic == 'uxth':
+        return [
+            '    let remap_immr = assign(c(0), tmp32.clone(), o1_size());',
+            '    let remap_imms = assign(c(15), tmp64.clone(), o1_size());',
+        ]
+    if alias_mnemonic == 'sxth':
+        return [
+            '    let remap_immr = assign(c(0), tmp32.clone(), o1_size());',
+            '    let remap_imms = assign(c(15), tmp64.clone(), o1_size());',
+        ]
+    if alias_mnemonic == 'sxtw':
+        return [
+            '    let remap_immr = assign(c(0), tmp32.clone(), o1_size());',
+            '    let remap_imms = assign(c(31), tmp64.clone(), o1_size());',
+        ]
+    raise ValueError(f"unsupported ARM bitfield alias: {alias_mnemonic}")
+
+
+def _arm_t_bitfield_move_alias(
+    alias_mnemonic: str,
+    sign_extend: bool,
+    preserve_destination: bool = False,
+) -> list[str]:
+    """ARM scalar bitfield alias using alias-level lsb/width operands before canonical execution."""
+    core_lines = _arm_t_bitfield_move(sign_extend, preserve_destination)
+    alias_lines = _arm_t_bitfield_alias_prelude(alias_mnemonic)
+    for line in core_lines:
+        if line == '    let datasize = bit_size_of_o1();':
+            continue
+        line = line.replace('o3()', 'tmp32.clone()')
+        line = line.replace('o4()', 'tmp64.clone()')
+        alias_lines.append(line)
+    return alias_lines
+
+
+def _arm_bitfield_alias_body(alias_mnemonic: str) -> Optional[list[str]]:
+    if alias_mnemonic == 'ubfx':
+        return _arm_t_bitfield_move_alias(alias_mnemonic, False)
+    if alias_mnemonic == 'sbfx':
+        return _arm_t_bitfield_move_alias(alias_mnemonic, True)
+    if alias_mnemonic == 'ubfiz':
+        return _arm_t_bitfield_move_alias(alias_mnemonic, False)
+    if alias_mnemonic == 'sbfiz':
+        return _arm_t_bitfield_move_alias(alias_mnemonic, True)
+    if alias_mnemonic == 'bfi':
+        return _arm_t_bitfield_move_alias(alias_mnemonic, False, preserve_destination=True)
+    if alias_mnemonic == 'bfxil':
+        return _arm_t_bitfield_move_alias(alias_mnemonic, False, preserve_destination=True)
+    if alias_mnemonic == 'uxth':
+        return _arm_t_bitfield_move_alias(alias_mnemonic, False)
+    if alias_mnemonic == 'sxth':
+        return _arm_t_bitfield_move_alias(alias_mnemonic, True)
+    if alias_mnemonic == 'sxtw':
+        return _arm_t_bitfield_move_alias(alias_mnemonic, True)
+    return None
+
+
+def _should_emit_arm_alias(alias: AliasInfo, status: str) -> bool:
+    if alias.mnemonic not in _ARM_BITFIELD_ALIAS_TARGETS:
+        return False
+    if alias.mnemonic in {'ubfx', 'sbfx'}:
+        return status == "real_ir" and 'BFXPreferred' in alias.condition
+    return True
+
+
+def _append_rust_instruction(parts: list[str], mnemonic: str, body_lines: list[str]) -> None:
+    parts.append("#[box_to_static_reference]")
+    parts.append(f"pub(super) fn {mnemonic}() -> &'static [IrStatement] {{")
+    for line in body_lines:
+        parts.append(line)
+    parts.append("}")
+    parts.append("")
+
+
+def _append_arm_alias_functions(
+    parts: list[str],
+    inst: Instruction,
+    status: str,
+    emitted_mnemonics: set[str],
+) -> None:
+    for alias in inst.aliases:
+        if not _should_emit_arm_alias(alias, status):
+            continue
+        if alias.mnemonic in emitted_mnemonics:
+            continue
+        body_lines = _arm_bitfield_alias_body(alias.mnemonic)
+        if body_lines is None:
+            continue
+        _append_rust_instruction(parts, alias.mnemonic, body_lines)
+        emitted_mnemonics.add(alias.mnemonic)
+
+
 def _t_xor() -> list[str]:
     """XOR with same-operand zero idiom detection, matching fireman's reference."""
     return [
@@ -2225,8 +2442,11 @@ def _build_arm_templates():
 
     # --- Bit manipulation (complex ops → exception since not representable in simple IR) ---
     ARM_TEMPLATES['rev'] = _arm_t_rev()
+    ARM_TEMPLATES['ubfm'] = _arm_t_bitfield_move(False)
+    ARM_TEMPLATES['sbfm'] = _arm_t_bitfield_move(True)
+    ARM_TEMPLATES['bfm'] = _arm_t_bitfield_move(False, preserve_destination=True)
     for _op in ['cls', 'clz', 'rbit', 'rev16', 'rev32', 'rev64',
-                'bfm', 'ubfm', 'sbfm', 'ubfx', 'sbfx', 'ubfiz', 'sbfiz', 'bfi', 'bfxil']:
+                'ubfx', 'sbfx', 'ubfiz', 'sbfiz', 'bfi', 'bfxil']:
         ARM_TEMPLATES[_op] = [f'    [exception("{_op}")].into()']
     ARM_TEMPLATES['extr'] = [
         '    let assignment = assign(o3(), o1(), o1_size());',
@@ -3526,6 +3746,7 @@ def generate_rust_file(instructions: list[Instruction], arch: str = 'intel') -> 
         parts.append("")
 
     # Instruction functions
+    emitted_mnemonics: set[str] = set()
     for inst in instructions:
         if inst.operation:
             parts.append("/// # Pseudocode")
@@ -3546,15 +3767,11 @@ def generate_rust_file(instructions: list[Instruction], arch: str = 'intel') -> 
                         stripped = ' ' * max_indent + stripped.lstrip()
                 parts.append(f"/// {stripped}")
             parts.append("/// ```")
-        parts.append("#[box_to_static_reference]")
-        parts.append(f"pub(super) fn {inst.mnemonic}() -> &'static [IrStatement] {{")
-
-        body_lines = generate_ir_body(inst, arch)
-        for line in body_lines:
-            parts.append(line)
-
-        parts.append("}")
-        parts.append("")
+        body_lines, status, _ = generate_ir_body_with_status(inst, arch)
+        _append_rust_instruction(parts, inst.mnemonic, body_lines)
+        emitted_mnemonics.add(inst.mnemonic)
+        if arch == 'arm':
+            _append_arm_alias_functions(parts, inst, status, emitted_mnemonics)
 
     return "\n".join(parts)
 
