@@ -60,34 +60,19 @@ pub(crate) struct Instruction {
     pub(crate) tables: Vec<(String, MdTable)>,
 }
 
+const JCC_MNEMONICS: &[&str] = &[
+    "Ja", "Jae", "Jb", "Jbe", "Jc", "Jcxz", "Jecxz", "Je", "Jg", "Jge", "Jl", "Jle", "Jna",
+    "Jnae", "Jnb", "Jnbe", "Jnc", "Jne", "Jng", "Jnge", "Jnl", "Jnle", "Jno", "Jnp", "Jns",
+    "Jnz", "Jo", "Jp", "Jpe", "Jpo", "Jrcxz", "Js", "Jz",
+];
+
 impl Instruction {
     /// Parse instruction name
     pub(crate) fn get_instructions_name(&self) -> Vec<String> {
         let data = self.title.clone();
 
         if data == "Jcc" {
-            return [
-                "Ja".into(),
-                "Jae".into(),
-                "Jb".into(),
-                "Jbe".into(),
-                "Jcxz".into(),
-                "Jecxz".into(),
-                "Jrcxz".into(),
-                "Jz".into(),
-                "Jg".into(),
-                "Jge".into(),
-                "Jl".into(),
-                "Jle".into(),
-                "Jnz".into(),
-                "Jno".into(),
-                "Jnp".into(),
-                "Jns".into(),
-                "Jo".into(),
-                "Jp".into(),
-                "Js".into(),
-            ]
-            .into();
+            return JCC_MNEMONICS.iter().map(|mnemonic| (*mnemonic).to_string()).collect();
         }
 
         if data.contains('[') {

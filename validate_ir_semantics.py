@@ -394,6 +394,10 @@ def validate_arm_function(fn: FunctionIR) -> ValidationResult:
             issues.append(f"{name} should use jump()")
         if 'c(0)' not in body and 'equal' not in body:
             issues.append(f"{name} should compare against zero")
+        if 'fallthrough' not in body or 'instruction_byte_size()' not in body:
+            issues.append(f"{name} should compute an explicit fallthrough target")
+        if 'jump(o2())' not in body:
+            issues.append(f"{name} should branch to o2()")
 
     # TBZ/TBNZ should use condition + jump with bit-test (shift+mask)
     if name in ('tbz', 'tbnz'):
@@ -403,6 +407,77 @@ def validate_arm_function(fn: FunctionIR) -> ValidationResult:
             issues.append(f"{name} should use jump()")
         if 'b::shr' not in body and 'b::and' not in body:
             issues.append(f"{name} should use shift+mask for bit test")
+        if 'fallthrough' not in body or 'instruction_byte_size()' not in body:
+            issues.append(f"{name} should compute an explicit fallthrough target")
+        if 'jump(o3())' not in body:
+            issues.append(f"{name} should branch to o3()")
+
+    # Mov-like load/store aliases should keep the same operand wiring as the generator templates.
+    if name in {'ldr', 'ldrb', 'ldrh', 'ldar', 'ldarb', 'ldarh', 'ldur', 'ldurb', 'ldurh'}:
+        if 'assign(o2(), o1(), o1_size())' not in body:
+            issues.append(f"{name} should assign o2() into o1() using o1_size()")
+
+    if name in {'str', 'strb', 'strh', 'stlr', 'stlrb', 'stlrh', 'stur'}:
+        if 'assign(o1(), o2(), o2_size())' not in body:
+            issues.append(f"{name} should assign o1() into o2() using o2_size()")
+
+    if name in {'prfm', 'prfum', 'dgh', 'yield'}:
+        if '[].into()' not in body:
+            issues.append(f"{name} should remain a no-op template")
+
+    arm_mov_like = {
+        'ldr', 'ldrb', 'ldrh', 'ldar', 'ldarb', 'ldarh', 'ldxr', 'ldxrb', 'ldxrh',
+        'ldaxr', 'ldaxrb', 'ldaxrh', 'ldxp', 'ldaxp', 'ldur', 'ldurb', 'ldurh', 'ldp', 'ldnp',
+        'ldapr', 'ldaprb', 'ldaprh', 'ldapur', 'ldapurb', 'ldapurh',
+        'ldlar', 'ldlarb', 'ldlarh', 'ldtr', 'ldtrb', 'ldtrh',
+    }
+    if name in arm_mov_like:
+        if 'assign(' not in body:
+            issues.append(f"{name} should use assign()")
+        if 'o2()' not in body or 'o1()' not in body:
+            issues.append(f"{name} should move source operand into destination operand")
+
+    arm_signext_loads = {
+        'ldrsb', 'ldrsh', 'ldrsw', 'ldursb', 'ldursh', 'ldursw',
+        'ldapursb', 'ldapursh', 'ldapursw', 'ldtrsb', 'ldtrsh', 'ldtrsw',
+    }
+    if name in arm_signext_loads and 'sign_extend(' not in body:
+        issues.append(f"{name} should use sign_extend()")
+
+    arm_store_like = {
+        'str', 'strb', 'strh', 'stlr', 'stlrb', 'stlrh', 'stxr', 'stxrb', 'stxrh',
+        'stlxr', 'stlxrb', 'stlxrh', 'stxp', 'stlxp', 'stur', 'sturb', 'sturh',
+        'stllr', 'stllrb', 'stllrh', 'stlur', 'stlurb', 'stlurh',
+        'stp', 'stnp', 'sttr', 'sttrb', 'sttrh',
+    }
+    if name in arm_store_like:
+        if 'assign(' not in body:
+            issues.append(f"{name} should use assign()")
+        if 'o1(), o2(), o2_size()' not in body:
+            issues.append(f"{name} should store operand1 into operand2")
+
+    if name == 'rev':
+        if 'tmp32' not in body and 'tmp64' not in body:
+            issues.append("rev should use byte-swap temporaries")
+        if 'b::shl' not in body or 'b::shr' not in body:
+            issues.append("rev should use shift-based byte reversal")
+        if 'condition(' not in body or 'bit_size_of_o1()' not in body:
+            issues.append("rev should branch on operand width")
+
+    if name == 'rmif':
+        if 'tmp64' not in body:
+            issues.append("rmif should materialize the rotated source into tmp64")
+        if 'condition(' not in body:
+            issues.append("rmif should gate flag updates with condition()")
+        if 'o2()' not in body or 'o3()' not in body:
+            issues.append("rmif should use the shift and mask operands")
+        if 'b::shr' not in body or 'b::and' not in body:
+            issues.append("rmif should extract rotated low bits with shift-and-mask operations")
+        for flag in ['pstate_n', 'pstate_z', 'pstate_c', 'pstate_v']:
+            if flag not in body:
+                issues.append(f"rmif should conditionally update {flag}")
+        if re.search(r'assign\([^,]+,\s*o1\(\)', body):
+            issues.append("rmif should not write back into the source register")
 
     # AXFLAG/XAFLAG should assign all 4 PSTATE flags
     if name in ('axflag', 'xaflag'):

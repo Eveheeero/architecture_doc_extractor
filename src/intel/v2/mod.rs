@@ -69,6 +69,9 @@ fn is_instruction_title(text: &str) -> bool {
         trimmed
     };
     let name_part = name_part.trim();
+    if name_part == "Jcc" {
+        return true;
+    }
     // The instruction name must be primarily uppercase letters, digits, and allowed separators
     // like / , [ ] and spaces
     let valid_chars = name_part.chars().all(|c| {
@@ -628,6 +631,25 @@ pub(crate) fn parse_instructions(mut d: Vec<(Vec<PdfString>, PdfBoxes)>) -> Vec<
                     table_section_name = String::from("Instruction");
                 }
                 ScaleClass::Heading => {
+                    if is_instruction_title(&text) {
+                        if !operation_lines.is_empty() {
+                            current.operation = indent_operation_lines(&operation_lines);
+                            operation_lines.clear();
+                        }
+
+                        if has_current && !current.title.is_empty() {
+                            result.push(current);
+                            current = Instruction::default();
+                        }
+                        let (name, summary) = parse_title(&text);
+                        current.title = name;
+                        current.summary = summary;
+                        has_current = true;
+                        section = CurrentSection::None;
+                        table_section_name = String::from("Instruction");
+                        continue;
+                    }
+
                     let new_section = detect_section(&text);
                     if new_section != CurrentSection::None {
                         // Known section heading — flush and switch

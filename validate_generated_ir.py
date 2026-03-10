@@ -18,17 +18,55 @@ from dataclasses import dataclass
 
 
 FIREMAN_DIR = ""
-GENERATED_DIR = ""
+GENERATED_DIR = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "output", "intel"
+)
+EXPECTED_JCC_FUNCTIONS = (
+    "ja",
+    "jae",
+    "jb",
+    "jbe",
+    "jc",
+    "je",
+    "jcxz",
+    "jecxz",
+    "jrcxz",
+    "jg",
+    "jge",
+    "jl",
+    "jle",
+    "jna",
+    "jnae",
+    "jnb",
+    "jnbe",
+    "jnc",
+    "jne",
+    "jng",
+    "jnge",
+    "jnl",
+    "jnle",
+    "jno",
+    "jnp",
+    "jns",
+    "jnz",
+    "jo",
+    "jp",
+    "jpe",
+    "jpo",
+    "js",
+    "jz",
+)
 
 
 @dataclass
 class IrSignature:
     """Normalized semantic signature of an IR function body."""
-    operators: list[str]     # IR operators used: b::add, b::sub, u::not, etc.
-    statements: list[str]    # Statement types: assign, condition, jump, calc_flags, etc.
-    flags: list[str]         # Flags referenced: cf, zf, sf, of, af, pf
-    operands: list[str]      # Operands used: o1(), o2(), o3(), etc.
-    registers: list[str]     # Explicit registers: rax, rsp, etc.
+
+    operators: list[str]  # IR operators used: b::add, b::sub, u::not, etc.
+    statements: list[str]  # Statement types: assign, condition, jump, calc_flags, etc.
+    flags: list[str]  # Flags referenced: cf, zf, sf, of, af, pf
+    operands: list[str]  # Operands used: o1(), o2(), o3(), etc.
+    registers: list[str]  # Explicit registers: rax, rsp, etc.
 
 
 def extract_functions(filepath: str) -> dict[str, str]:
@@ -40,9 +78,9 @@ def extract_functions(filepath: str) -> dict[str, str]:
     # Match pub(super) fn name() -> ... { ... }
     # Also match #[box_to_static_reference] decorated functions
     pattern = re.compile(
-        r'(?:#\[box_to_static_reference\]\s*)?'
-        r'pub\(super\)\s+fn\s+(\w+)\(\)\s*->\s*[^{]+\{([^}]*(?:\{[^}]*\}[^}]*)*)\}',
-        re.DOTALL
+        r"(?:#\[box_to_static_reference\]\s*)?"
+        r"pub\(super\)\s+fn\s+(\w+)\(\)\s*->\s*[^{]+\{([^}]*(?:\{[^}]*\}[^}]*)*)\}",
+        re.DOTALL,
     )
     for m in pattern.finditer(content):
         name = m.group(1)
@@ -54,11 +92,25 @@ def extract_functions(filepath: str) -> dict[str, str]:
 
 def extract_signature(body: str) -> IrSignature:
     """Extract a normalized semantic signature from a function body."""
-    operators = sorted(set(re.findall(r'[bu]::\w+', body)))
-    statements = sorted(set(re.findall(r'\b(assign|condition|jump|jump_by_call|halt|exception|calc_flags_automatically|extend_undefined_flags|type_specified|assertion)\b', body)))
-    flags = sorted(set(re.findall(r'\b(cf|zf|sf|of|af|pf|df|tf)\b', body)))
-    operands = sorted(set(re.findall(r'\bo[1-4]\(\)', body)))
-    registers = sorted(set(re.findall(r'\b(rax|rbx|rcx|rdx|rsp|rbp|rsi|rdi|rip|eax|ebx|ecx|edx|esp|ebp|esi|edi|ax|bx|cx|dx|al|ah|bl|bh|cl|ch|dl|dh|r8|r9|r10|r11|r12|r13|r14|r15|tmp\d+|xmm\d+|ymm\d+|zmm\d+)\b', body)))
+    operators = sorted(set(re.findall(r"[bu]::\w+", body)))
+    statements = sorted(
+        set(
+            re.findall(
+                r"\b(assign|condition|jump|jump_by_call|halt|exception|calc_flags_automatically|extend_undefined_flags|type_specified|assertion)\b",
+                body,
+            )
+        )
+    )
+    flags = sorted(set(re.findall(r"\b(cf|zf|sf|of|af|pf|df|tf)\b", body)))
+    operands = sorted(set(re.findall(r"\bo[1-4]\(\)", body)))
+    registers = sorted(
+        set(
+            re.findall(
+                r"\b(rax|rbx|rcx|rdx|rsp|rbp|rsi|rdi|rip|eax|ebx|ecx|edx|esp|ebp|esi|edi|ax|bx|cx|dx|al|ah|bl|bh|cl|ch|dl|dh|r8|r9|r10|r11|r12|r13|r14|r15|tmp\d+|xmm\d+|ymm\d+|zmm\d+)\b",
+                body,
+            )
+        )
+    )
 
     return IrSignature(
         operators=operators,
@@ -131,14 +183,21 @@ def main():
             funcs = extract_functions(fpath)
             generated.update(funcs)
 
+    missing_jcc = [name for name in EXPECTED_JCC_FUNCTIONS if name not in generated]
+    if missing_jcc:
+        print("\nERROR: Missing expected Jcc generated functions:")
+        for name in missing_jcc:
+            print(f"  - {name}")
+        sys.exit(1)
+
     print(f"Reference implementations: {len(reference)}")
     print(f"Generated implementations: {len(generated)}")
 
     # Compare overlapping functions
     common = set(reference.keys()) & set(generated.keys())
     # Handle std_ vs std naming (fireman uses std_ to avoid Rust keyword)
-    if 'std_' in reference and 'std' in generated:
-        common.add('std')
+    if "std_" in reference and "std" in generated:
+        common.add("std")
 
     print(f"Common functions to validate: {len(common)}")
     print()
@@ -165,7 +224,12 @@ def main():
         else:
             # Check severity: missing core operators is a failure,
             # extra operators or missing type_specified is a warning
-            is_failure = any("Missing operators" in d or "Missing statements" in d or "Missing flags" in d for d in diffs)
+            is_failure = any(
+                "Missing operators" in d
+                or "Missing statements" in d
+                or "Missing flags" in d
+                for d in diffs
+            )
             if is_failure:
                 failed += 1
                 failures.append((name, diffs))

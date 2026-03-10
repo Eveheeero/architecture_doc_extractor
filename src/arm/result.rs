@@ -223,7 +223,11 @@ impl ArmInstruction {
             let label = if bf.width == 1 {
                 format!("{}", bf.hibit)
             } else {
-                format!("{}:{}", bf.hibit, bf.hibit - bf.width + 1)
+                let start_bit = bf
+                    .hibit
+                    .checked_sub(bf.width.saturating_sub(1))
+                    .unwrap_or(0);
+                format!("{}:{}", bf.hibit, start_bit)
             };
             headers.push(label);
 

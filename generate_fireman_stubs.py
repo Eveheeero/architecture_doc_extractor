@@ -1228,6 +1228,35 @@ def _t_bswap() -> list[str]:
     return lines
 
 
+def _arm_t_rev() -> list[str]:
+    """ARM REV using the same byte-swap structure as Intel BSWAP, but with src=o2 and dst=o1."""
+    lines = [
+        '    let size = o1_size();',
+        '    let swap_32 = [',
+        '        assign(o2(), tmp32.clone(), size.clone()),',
+    ]
+    for _ in range(3):
+        lines.append('        assign(tmp32.clone(), o1(), size_result_bit(c(8))),')
+        lines.append('        assign(b::shl(o1(), c(8)), o1(), size.clone()),')
+        lines.append('        assign(b::shr(tmp32.clone(), c(8)), tmp32.clone(), size.clone()),')
+    lines.append('        assign(tmp32.clone(), o1(), size_result_bit(c(8))),')
+    lines.append('    ];')
+
+    lines.append('    let swap_64 = [')
+    lines.append('        assign(o2(), tmp64.clone(), size.clone()),')
+    for _ in range(7):
+        lines.append('        assign(tmp64.clone(), o1(), size_result_bit(c(8))),')
+        lines.append('        assign(b::shl(o1(), c(8)), o1(), size.clone()),')
+        lines.append('        assign(b::shr(tmp64.clone(), c(8)), tmp64.clone(), size.clone()),')
+    lines.append('        assign(tmp64.clone(), o1(), size_result_bit(c(8))),')
+    lines.append('    ];')
+
+    lines.append('    let rev = condition(b::equal(bit_size_of_o1(), c(32), size_unlimited()), swap_32, swap_64);')
+    lines.append('    let type1 = type_specified(o1(), o1_size(), DataType::Int);')
+    lines.append('    [rev, type1].into()')
+    return lines
+
+
 def _t_xor() -> list[str]:
     """XOR with same-operand zero idiom detection, matching fireman's reference."""
     return [
@@ -2183,8 +2212,20 @@ def _build_arm_templates():
     ARM_TEMPLATES['cinv'] = ARM_TEMPLATES['csinv']
     ARM_TEMPLATES['cneg'] = ARM_TEMPLATES['csneg']
 
+    # --- Flag manipulation ---
+    ARM_TEMPLATES['rmif'] = [
+        '    let rotated_value = b::or(b::shr(o1(), o2()), b::shl(o1(), b::sub(bit_size_of_o1(), o2())));',
+        '    let rotate = condition(b::equal(o2(), c(0), size_unlimited()), [assign(o1(), tmp64.clone(), o1_size())], [assign(rotated_value, tmp64.clone(), o1_size())]);',
+        '    let set_n = condition(b::and(o3(), c(8)), [assign(b::and(b::shr(tmp64.clone(), c(3)), c(1)), pstate_n.clone(), size_relative(pstate_n.clone()))], []);',
+        '    let set_z = condition(b::and(o3(), c(4)), [assign(b::and(b::shr(tmp64.clone(), c(2)), c(1)), pstate_z.clone(), size_relative(pstate_z.clone()))], []);',
+        '    let set_c = condition(b::and(o3(), c(2)), [assign(b::and(b::shr(tmp64.clone(), c(1)), c(1)), pstate_c.clone(), size_relative(pstate_c.clone()))], []);',
+        '    let set_v = condition(b::and(o3(), c(1)), [assign(b::and(tmp64.clone(), c(1)), pstate_v.clone(), size_relative(pstate_v.clone()))], []);',
+        '    [rotate, set_n, set_z, set_c, set_v].into()',
+    ]
+
     # --- Bit manipulation (complex ops → exception since not representable in simple IR) ---
-    for _op in ['cls', 'clz', 'rbit', 'rev', 'rev16', 'rev32', 'rev64',
+    ARM_TEMPLATES['rev'] = _arm_t_rev()
+    for _op in ['cls', 'clz', 'rbit', 'rev16', 'rev32', 'rev64',
                 'bfm', 'ubfm', 'sbfm', 'ubfx', 'sbfx', 'ubfiz', 'sbfiz', 'bfi', 'bfxil']:
         ARM_TEMPLATES[_op] = [f'    [exception("{_op}")].into()']
     ARM_TEMPLATES['extr'] = [
@@ -2204,6 +2245,8 @@ def _build_arm_templates():
     ARM_TEMPLATES['ret'] = ['    [jump(x30.clone())].into()']
     ARM_TEMPLATES['nop'] = ['    [].into()']
     ARM_TEMPLATES['hint'] = ['    [].into()']
+    ARM_TEMPLATES['dgh'] = ARM_TEMPLATES['nop']
+    ARM_TEMPLATES['yield'] = ARM_TEMPLATES['nop']
 
     # --- Conditional branch on register ---
     ARM_TEMPLATES['cbz'] = [
@@ -2281,22 +2324,62 @@ def _build_arm_templates():
     ARM_TEMPLATES['stxr'] = ARM_TEMPLATES['str']
     ARM_TEMPLATES['ldaxr'] = ARM_TEMPLATES['mov']
     ARM_TEMPLATES['stlxr'] = ARM_TEMPLATES['str']
+    ARM_TEMPLATES['ldxp'] = ARM_TEMPLATES['mov']
+    ARM_TEMPLATES['ldaxp'] = ARM_TEMPLATES['mov']
+    ARM_TEMPLATES['stxp'] = ARM_TEMPLATES['str']
+    ARM_TEMPLATES['stlxp'] = ARM_TEMPLATES['str']
     ARM_TEMPLATES['ldur'] = ARM_TEMPLATES['mov']
     ARM_TEMPLATES['stur'] = ARM_TEMPLATES['str']
+    ARM_TEMPLATES['sturb'] = ARM_TEMPLATES['str']
+    ARM_TEMPLATES['sturh'] = ARM_TEMPLATES['str']
     # Additional load/store variants (acquire/release/exclusive byte/half)
     ARM_TEMPLATES['ldarb'] = ARM_TEMPLATES['mov']
     ARM_TEMPLATES['ldarh'] = ARM_TEMPLATES['mov']
     ARM_TEMPLATES['ldaxrb'] = ARM_TEMPLATES['mov']
     ARM_TEMPLATES['ldaxrh'] = ARM_TEMPLATES['mov']
+    ARM_TEMPLATES['ldxrb'] = ARM_TEMPLATES['mov']
+    ARM_TEMPLATES['ldxrh'] = ARM_TEMPLATES['mov']
     ARM_TEMPLATES['stlrb'] = ARM_TEMPLATES['str']
     ARM_TEMPLATES['stlrh'] = ARM_TEMPLATES['str']
     ARM_TEMPLATES['stlxrb'] = ARM_TEMPLATES['str']
     ARM_TEMPLATES['stlxrh'] = ARM_TEMPLATES['str']
+    ARM_TEMPLATES['stxrb'] = ARM_TEMPLATES['str']
+    ARM_TEMPLATES['stxrh'] = ARM_TEMPLATES['str']
     ARM_TEMPLATES['ldurb'] = ARM_TEMPLATES['mov']
     ARM_TEMPLATES['ldurh'] = ARM_TEMPLATES['mov']
     ARM_TEMPLATES['ldursb'] = ARM_TEMPLATES['sxtb']
     ARM_TEMPLATES['ldursh'] = ARM_TEMPLATES['sxtb']
     ARM_TEMPLATES['ldursw'] = ARM_TEMPLATES['sxtb']
+    # Additional plain memory forms whose semantics still collapse to load/store in this IR.
+    ARM_TEMPLATES['ldapr'] = ARM_TEMPLATES['mov']
+    ARM_TEMPLATES['ldaprb'] = ARM_TEMPLATES['mov']
+    ARM_TEMPLATES['ldaprh'] = ARM_TEMPLATES['mov']
+    ARM_TEMPLATES['ldapur'] = ARM_TEMPLATES['mov']
+    ARM_TEMPLATES['ldapurb'] = ARM_TEMPLATES['mov']
+    ARM_TEMPLATES['ldapurh'] = ARM_TEMPLATES['mov']
+    ARM_TEMPLATES['ldapursb'] = ARM_TEMPLATES['sxtb']
+    ARM_TEMPLATES['ldapursh'] = ARM_TEMPLATES['sxtb']
+    ARM_TEMPLATES['ldapursw'] = ARM_TEMPLATES['sxtb']
+    ARM_TEMPLATES['ldlar'] = ARM_TEMPLATES['mov']
+    ARM_TEMPLATES['ldlarb'] = ARM_TEMPLATES['mov']
+    ARM_TEMPLATES['ldlarh'] = ARM_TEMPLATES['mov']
+    ARM_TEMPLATES['ldnp'] = ARM_TEMPLATES['mov']
+    ARM_TEMPLATES['ldtr'] = ARM_TEMPLATES['mov']
+    ARM_TEMPLATES['ldtrb'] = ARM_TEMPLATES['mov']
+    ARM_TEMPLATES['ldtrh'] = ARM_TEMPLATES['mov']
+    ARM_TEMPLATES['ldtrsb'] = ARM_TEMPLATES['sxtb']
+    ARM_TEMPLATES['ldtrsh'] = ARM_TEMPLATES['sxtb']
+    ARM_TEMPLATES['ldtrsw'] = ARM_TEMPLATES['sxtb']
+    ARM_TEMPLATES['stllr'] = ARM_TEMPLATES['str']
+    ARM_TEMPLATES['stllrb'] = ARM_TEMPLATES['str']
+    ARM_TEMPLATES['stllrh'] = ARM_TEMPLATES['str']
+    ARM_TEMPLATES['stlur'] = ARM_TEMPLATES['str']
+    ARM_TEMPLATES['stlurb'] = ARM_TEMPLATES['str']
+    ARM_TEMPLATES['stlurh'] = ARM_TEMPLATES['str']
+    ARM_TEMPLATES['stnp'] = ARM_TEMPLATES['str']
+    ARM_TEMPLATES['sttr'] = ARM_TEMPLATES['str']
+    ARM_TEMPLATES['sttrb'] = ARM_TEMPLATES['str']
+    ARM_TEMPLATES['sttrh'] = ARM_TEMPLATES['str']
 
     # --- Address generation ---
     ARM_TEMPLATES['adr'] = [

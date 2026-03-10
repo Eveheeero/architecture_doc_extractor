@@ -5,6 +5,42 @@ import re
 import sys
 
 RESULT_DIR = "result/intel"
+GENERATED_J_FILE = os.path.join("output", "intel", "j_generated.rs")
+EXPECTED_JCC_FILES = (
+    "Ja",
+    "Jae",
+    "Jb",
+    "Jbe",
+    "Jc",
+    "Je",
+    "Jcxz",
+    "Jecxz",
+    "Jrcxz",
+    "Jg",
+    "Jge",
+    "Jl",
+    "Jle",
+    "Jna",
+    "Jnae",
+    "Jnb",
+    "Jnbe",
+    "Jnc",
+    "Jne",
+    "Jng",
+    "Jnge",
+    "Jnl",
+    "Jnle",
+    "Jno",
+    "Jnp",
+    "Jns",
+    "Jnz",
+    "Jo",
+    "Jp",
+    "Jpe",
+    "Jpo",
+    "Js",
+    "Jz",
+)
 
 def validate_filename(name: str) -> list[str]:
     """Check filename is a valid instruction name."""
@@ -74,6 +110,29 @@ def validate_content(filepath: str) -> list[str]:
 
     return errors
 
+
+def validate_generated_jcc() -> list[str]:
+    """Check that the generated J bucket contains the expected JCC functions."""
+    if not os.path.isfile(GENERATED_J_FILE):
+        return [f"missing generated Jcc bucket: {GENERATED_J_FILE}"]
+
+    with open(GENERATED_J_FILE, 'r') as f:
+        generated_content = f.read()
+
+    missing = []
+    for name in EXPECTED_JCC_FILES:
+        signature = f"pub(super) fn {name.lower()}()"
+        if signature not in generated_content:
+            missing.append(name.lower())
+
+    if not missing:
+        return []
+
+    return [
+        "missing generated Jcc functions in output/intel/j_generated.rs: "
+        + ", ".join(missing)
+    ]
+
 def main():
     if not os.path.isdir(RESULT_DIR):
         print(f"ERROR: {RESULT_DIR} not found")
@@ -86,6 +145,11 @@ def main():
     filename_errors = 0
     content_errors = 0
     files_with_errors = 0
+
+    missing_jcc = [name for name in EXPECTED_JCC_FILES if f"{name}.md" not in md_files]
+    if missing_jcc:
+        all_errors.extend([f"missing expected Jcc markdown: {name}.md" for name in missing_jcc])
+        content_errors += len(missing_jcc)
 
     for f in md_files:
         name = f.replace('.md', '')
@@ -104,6 +168,12 @@ def main():
         if file_errors:
             files_with_errors += 1
             all_errors.extend(file_errors)
+
+    generated_errors = validate_generated_jcc()
+    if generated_errors:
+        files_with_errors += 1
+        all_errors.extend(generated_errors)
+        content_errors += len(generated_errors)
 
     # Summary
     print(f"\n{'='*60}")
